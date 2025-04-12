@@ -227,7 +227,7 @@ public:
 
         animations.addAnimation(AnimationState::Jump, "player_jump", 12, 0.08f, { 128, 128 }, false);
      
-        animations.addAnimation(AnimationState::Dash, "player_dash", 1, dashDuration, { 128, 128 }, false);
+        animations.addAnimation(AnimationState::Dash, "player_dash", 2, dashDuration, { 128, 128 }, false);
 		animations.addAnimation(AnimationState::Parry, "player_parry", 2, 0.4f, { 128, 128 }, false);
 
         animations.play(AnimationState::Idle);
