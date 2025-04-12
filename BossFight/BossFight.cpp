@@ -225,6 +225,8 @@ public:
         animations.addAnimation(AnimationState::Attack2, "player_attack2", 4, 0.1f, { 128, 128 }, false); 
         animations.addAnimation(AnimationState::Attack3, "player_attack3", 3, 0.101f, { 128, 128 }, false); 
         animations.addAnimation(AnimationState::Jump, "player_jump", 12, 0.08f, { 128, 128 }, false);
+     
+        animations.addAnimation(AnimationState::Dash, "player_dash", 2, dashDuration, { 128, 128 }, false);
         animations.addAnimation(AnimationState::Dash, "player_dash", 2, dashDuration, { 128, 128 }, false);
 		animations.addAnimation(AnimationState::Parry, "player_parry", 2, 0.4f, { 128, 128 }, false);
 
