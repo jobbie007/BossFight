@@ -70,16 +70,7 @@ private:
 
 // --- Animation State Enum ---
 enum class AnimationState {
-    Idle,
-    Run,
-    Jump,
-    Fall, 
-    Attack1, // *** Changed Attack to Attack1 for random attacks ***
-    Attack2, // *** Added Attack2 for random attacks ***
-    Attack3, // *** Added Attack3 for random attacks ***
-    Parry,
-    Dash,
-    None
+    Idle, Run, Jump, Fall, Attack1, Attack2, Attack3, Parry, Dash, None
 };
 
 // --- Animation Component ---
@@ -194,7 +185,7 @@ private:
 // --- Player Class ---
 class Player {
 public:
-    Player() {
+    Player(int maxHealth = 100,int currentHealth=100) : maxHealth(maxHealth), currentHealth(currentHealth) {
         loadResources();
         initAnimations();
         position = { 200.f, 500.f };
@@ -225,8 +216,6 @@ public:
         animations.addAnimation(AnimationState::Attack2, "player_attack2", 4, 0.1f, { 128, 128 }, false); 
         animations.addAnimation(AnimationState::Attack3, "player_attack3", 3, 0.101f, { 128, 128 }, false); 
         animations.addAnimation(AnimationState::Jump, "player_jump", 12, 0.08f, { 128, 128 }, false);
-     
-        animations.addAnimation(AnimationState::Dash, "player_dash", 2, dashDuration, { 128, 128 }, false);
         animations.addAnimation(AnimationState::Dash, "player_dash", 2, dashDuration, { 128, 128 }, false);
 		animations.addAnimation(AnimationState::Parry, "player_parry", 2, 0.4f, { 128, 128 }, false);
 
@@ -304,6 +293,18 @@ public:
         }
     }
 
+    void takeDamage(int amount) {
+        if (!isAlive()) return; // Already dead
+        currentHealth -= amount;
+        currentHealth = std::max(0, currentHealth); // Clamp health at 0
+        std::cout << "[Player] Took " << amount << " damage. Health: " << currentHealth << "/" << maxHealth << std::endl;
+      
+    }
+
+    int getHealth() const { return currentHealth; }
+    int getMaxHealth() const { return maxHealth; }
+    bool isAlive() const { return currentHealth > 0; }
+
     sf::FloatRect getGlobalBounds() const {
         return animations.getSprite().getGlobalBounds();
     }
@@ -319,6 +320,9 @@ private:
     bool facingRight = true;
     bool isGrounded = false;
     const float LEFT_BOUNDARY = 1.0f;
+
+    int maxHealth;
+    int currentHealth;
 
     float moveSpeed = 300.f;
     float jumpForce = 700.f;
@@ -474,14 +478,15 @@ private:
 
 
 // --- Game Class ---
-class Game {
+class BossGame {
 public:
-    Game() : window(sf::VideoMode(1280, 720), "SFML Platformer"), player()
+    BossGame() : window(sf::VideoMode(1280, 720), "SFML Platformer"), player()
     {
         window.setVerticalSyncEnabled(true);
         loadResources();
         initViews();
         initBackground();
+		setupUI();
     }
 
     void run() {
@@ -502,6 +507,14 @@ private:
     sf::Sprite background;
     Player player;
 
+
+    sf::RectangleShape playerHealthBarBackground;
+    sf::RectangleShape playerHealthBarFill;
+    const float HEALTH_BAR_WIDTH = 200.f;
+    const float HEALTH_BAR_HEIGHT = 20.f;
+    const float HEALTH_BAR_PADDING = 10.f;
+    const float HEALTH_BAR_POS_X = 25.f; //  X position
+    const float HEALTH_BAR_POS_Y = 25.f; //  Y position
     void loadResources() {
         TextureManager::instance().load("background", "../assets/background.png");
     }
@@ -527,6 +540,19 @@ private:
         }
     }
 
+    void setupUI() {
+        playerHealthBarBackground.setSize(sf::Vector2f(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT));
+        playerHealthBarBackground.setFillColor(sf::Color(50, 50, 50, 200));
+        playerHealthBarBackground.setOutlineColor(sf::Color::Black);
+        playerHealthBarBackground.setOutlineThickness(2.f);
+        playerHealthBarBackground.setPosition(HEALTH_BAR_POS_X, HEALTH_BAR_POS_Y); //position of health bar
+
+        playerHealthBarFill.setSize(sf::Vector2f(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT));
+        playerHealthBarFill.setFillColor(sf::Color(0, 200, 0, 220));
+        playerHealthBarFill.setPosition(HEALTH_BAR_POS_X, HEALTH_BAR_POS_Y);
+        
+    }
+
     void processInput() {
         sf::Event event;
         while (window.pollEvent(event)) {
@@ -549,6 +575,9 @@ private:
                 else if (event.key.code == sf::Keyboard::Q) {
                     player.parry();
                 }
+                else if (event.key.code == sf::Keyboard::T) {
+                    player.takeDamage(10); // Take 10 damage when T is pressed only for debugging purposes
+                }
             }
 
             if (event.type == sf::Event::MouseButtonPressed) {
@@ -561,15 +590,39 @@ private:
             }
         }
 
+
         sf::Vector2f movement(0.f, 0.f);
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) movement.x -= 1.f;
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) movement.x += 1.f;
         player.move(movement);
     }
+    void updateUI() {
+        // Calculate health percentage
+        float healthPercent = static_cast<float>(player.getHealth()) / player.getMaxHealth();
+        healthPercent = std::max(0.f, healthPercent); // Ensure percent doesn't go below 0
+
+        // Update the fill bar width
+        playerHealthBarFill.setSize(sf::Vector2f(HEALTH_BAR_WIDTH * healthPercent, HEALTH_BAR_HEIGHT));
+
+        // Optional: Change color based on health
+        if (healthPercent < 0.3f) {
+            playerHealthBarFill.setFillColor(sf::Color(220, 0, 0, 220)); // Red when low
+        }
+        else if (healthPercent < 0.6f) {
+            playerHealthBarFill.setFillColor(sf::Color(220, 220, 0, 220)); // Yellow when medium
+        }
+        else {
+            playerHealthBarFill.setFillColor(sf::Color(0, 200, 0, 220)); // Green when high
+        }
+    }
 
     void update(float dt) {
         player.update(dt);
-        
+        updateUI();
+		if (player.getHealth() <= 0) {
+			std::cout << "[Game] Player is dead!" << std::endl;
+			window.close();
+		}
     }
 
     void render() {
@@ -581,7 +634,9 @@ private:
         }
 
         player.draw(window);
-
+        window.setView(window.getDefaultView());
+        window.draw(playerHealthBarBackground);
+        window.draw(playerHealthBarFill);
         window.display();
     }
 };
@@ -589,7 +644,7 @@ private:
 
 // --- Main Function ---
 int main() {
-    Game game;
+    BossGame game;
     game.run();
     return 0;
 }
