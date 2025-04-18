@@ -70,7 +70,7 @@ private:
 
 // --- Animation State Enum ---
 enum class AnimationState {
-    Idle, Run, Jump, Fall, Attack1, Attack2, Attack3, Parry, Dash, None
+    Idle, Run, Jump, Fall, Attack1, Attack2, Attack3, Parry, Dash, Dead, None
 };
 
 // --- Animation Component ---
@@ -206,6 +206,7 @@ public:
         tm.load("player_jump", "../assets/player/Jump.png"); 
         tm.load("player_dash", "../assets/player/Dash.png");
 		tm.load("player_parry", "../assets/player/Parry.png");
+		tm.load("player_dead", "../assets/player/Dead.png");
     }
 
     void initAnimations() {
@@ -218,7 +219,7 @@ public:
         animations.addAnimation(AnimationState::Jump, "player_jump", 12, 0.08f, { 128, 128 }, false);
         animations.addAnimation(AnimationState::Dash, "player_dash", 2, dashDuration, { 128, 128 }, false);
 		animations.addAnimation(AnimationState::Parry, "player_parry", 2, 0.4f, { 128, 128 }, false);
-
+        animations.addAnimation(AnimationState::Dead, "player_dead", 3, 0.4f, { 128, 128 }, false);
         animations.play(AnimationState::Idle);
     }
 
@@ -482,6 +483,7 @@ class BossGame {
 public:
     BossGame() : window(sf::VideoMode(1280, 720), "SFML Platformer"), player()
     {
+		window.setFramerateLimit(60);
         window.setVerticalSyncEnabled(true);
         loadResources();
         initViews();
@@ -510,7 +512,7 @@ private:
 
     sf::RectangleShape playerHealthBarBackground;
     sf::RectangleShape playerHealthBarFill;
-    const float HEALTH_BAR_WIDTH = 200.f;
+    const float HEALTH_BAR_WIDTH = 300.f;
     const float HEALTH_BAR_HEIGHT = 20.f;
     const float HEALTH_BAR_PADDING = 10.f;
     const float HEALTH_BAR_POS_X = 25.f; //  X position
@@ -560,25 +562,36 @@ private:
                 window.close();
 
             if (event.type == sf::Event::KeyPressed) {
-                if (event.key.code == sf::Keyboard::Space) {
+                switch (event.key.code) {
+                case sf::Keyboard::Space:
                     player.jump();
-                }
-                else if (event.key.code == sf::Keyboard::E) { // Attack key
+                    break;
+
+                case sf::Keyboard::E:
                     player.attack();
-                }
-                else if (event.key.code == sf::Keyboard::LShift) {
+                    break;
+
+                case sf::Keyboard::LShift:
                     player.dash();
-                }
-                else if (event.key.code == sf::Keyboard::Escape) {
+                    break;
+
+                case sf::Keyboard::Escape:
                     window.close();
-				}
-                else if (event.key.code == sf::Keyboard::Q) {
+                    break;
+
+                case sf::Keyboard::Q:
                     player.parry();
-                }
-                else if (event.key.code == sf::Keyboard::T) {
-                    player.takeDamage(10); // Take 10 damage when T is pressed only for debugging purposes
+                    break;
+
+                case sf::Keyboard::T:
+                    player.takeDamage(10); // Debugging: take 10 damage
+                    break;
+
+                default:
+                    break;
                 }
             }
+
 
             if (event.type == sf::Event::MouseButtonPressed) {
                 if (event.mouseButton.button == sf::Mouse::Left) {
@@ -605,10 +618,10 @@ private:
         playerHealthBarFill.setSize(sf::Vector2f(HEALTH_BAR_WIDTH * healthPercent, HEALTH_BAR_HEIGHT));
 
         // Optional: Change color based on health
-        if (healthPercent < 0.3f) {
+        if (healthPercent < 0.33f) {
             playerHealthBarFill.setFillColor(sf::Color(220, 0, 0, 220)); // Red when low
         }
-        else if (healthPercent < 0.6f) {
+        else if (healthPercent < 0.66f) {
             playerHealthBarFill.setFillColor(sf::Color(220, 220, 0, 220)); // Yellow when medium
         }
         else {
@@ -621,7 +634,7 @@ private:
         updateUI();
 		if (player.getHealth() <= 0) {
 			std::cout << "[Game] Player is dead!" << std::endl;
-			window.close();
+            
 		}
     }
 
