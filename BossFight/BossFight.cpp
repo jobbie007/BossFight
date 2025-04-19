@@ -214,16 +214,16 @@ public:
 
     void initAnimations() {
         // Adjust frame counts, durations, sizes, loops to match your assets
-        animations.addAnimation(AnimationState::Idle, "player_idle", 6, 0.2f, { 128, 128 }, true);
-        animations.addAnimation(AnimationState::Run, "player_run", 8, 0.1f, { 128, 128 }, true);
-        animations.addAnimation(AnimationState::Attack1, "player_attack1", 6, 0.06f, { 128, 128 }, false);
-        animations.addAnimation(AnimationState::Attack2, "player_attack2", 4, 0.09f, { 128, 128 }, false);
-        animations.addAnimation(AnimationState::Attack3, "player_attack3", 3, 0.12f, { 128, 128 }, false);
-        animations.addAnimation(AnimationState::Jump, "player_jump", 12, 0.08f, { 128, 128 }, false);
-        animations.addAnimation(AnimationState::Dash, "player_dash", 2, dashDuration, { 128, 128 }, false);
-        animations.addAnimation(AnimationState::Parry, "player_parry", 2, 0.4f, { 128, 128 }, false);
-        animations.addAnimation(AnimationState::Dead, "player_dead", 3, 0.8f, { 128, 128 }, false);
-		animations.addAnimation(AnimationState::Hurt, "player_hurt", 2, hurtDuration, { 128, 128 }, false);
+        animations.addAnimation(AnimationState::Idle, "player_idle", 8, 0.2f, { 160, 128 }, true);
+        animations.addAnimation(AnimationState::Run, "player_run", 8, 0.1f, { 160, 128 }, true);
+        animations.addAnimation(AnimationState::Attack1, "player_attack1", 6, 0.06f, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Attack2, "player_attack2", 5, 0.09f, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Attack3, "player_attack3", 10, 0.04f, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Jump, "player_jump", 12, 0.08f, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Dash, "player_dash", 5, dashDuration, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Parry, "player_parry", 6, 0.08f, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Dead, "player_dead", 7, 0.2f, { 160, 128 }, false);
+		animations.addAnimation(AnimationState::Hurt, "player_hurt", 2, hurtDuration, { 160, 128 }, false);
         animations.play(AnimationState::Idle);
     }
 
@@ -404,7 +404,7 @@ private:
     float moveSpeed = 300.f;
     float jumpForce = 700.f;
     float gravity = 1800.f; 
-    const float groundLevel = 455.f;
+    const float groundLevel = 485.f;
 
     bool canDash = true;
     float dashSpeed = 700.f;
