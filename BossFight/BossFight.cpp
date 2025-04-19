@@ -222,7 +222,7 @@ public:
         animations.addAnimation(AnimationState::Jump, "player_jump", 12, 0.08f, { 128, 128 }, false);
         animations.addAnimation(AnimationState::Dash, "player_dash", 2, dashDuration, { 128, 128 }, false);
         animations.addAnimation(AnimationState::Parry, "player_parry", 2, 0.4f, { 128, 128 }, false);
-        animations.addAnimation(AnimationState::Dead, "player_dead", 3, 1.0f, { 128, 128 }, false);
+        animations.addAnimation(AnimationState::Dead, "player_dead", 3, 0.8f, { 128, 128 }, false);
 		animations.addAnimation(AnimationState::Hurt, "player_hurt", 2, hurtDuration, { 128, 128 }, false);
         animations.play(AnimationState::Idle);
     }
@@ -369,9 +369,9 @@ public:
             animations.getSprite().setColor(damageColor); // Start flash with red color
             animations.play(AnimationState::Hurt);
 
-            velocity.x = -knockbackForceX; // Assuming knockback is always left relative to the player's original facing
-            velocity.y = knockbackForceY; // Apply vertical knockback
-            isGrounded = false; // Knockback usually puts you airborne briefly
+            velocity.x = -knockbackForceX; 
+            velocity.y = knockbackForceY;
+            isGrounded = false; 
 
             std::cout << "[Player] Hurt state applied with knockback!" << std::endl;
         }
