@@ -69,7 +69,7 @@ private:
 
 // --- Animation State Enum ---
 enum class AnimationState {
-    Idle, Run, Jump, Attack1, Attack2, Attack3, Parry, Dash, Dead, None
+    Idle, Run, Jump, Attack1, Attack2, Attack3, Parry, Dash, Dead, Hurt, None
 };
 
 // --- Animation Component ---
@@ -209,40 +209,67 @@ public:
         tm.load("player_dash", "../assets/player/Dash.png");
         tm.load("player_parry", "../assets/player/Parry.png");
         tm.load("player_dead", "../assets/player/Dead.png");
+		tm.load("player_hurt", "../assets/player/Hurt.png");
     }
 
     void initAnimations() {
         // Adjust frame counts, durations, sizes, loops to match your assets
         animations.addAnimation(AnimationState::Idle, "player_idle", 6, 0.2f, { 128, 128 }, true);
         animations.addAnimation(AnimationState::Run, "player_run", 8, 0.1f, { 128, 128 }, true);
-        animations.addAnimation(AnimationState::Attack1, "player_attack1", 6, 0.07f, { 128, 128 }, false);
-        animations.addAnimation(AnimationState::Attack2, "player_attack2", 4, 0.1f, { 128, 128 }, false);
-        animations.addAnimation(AnimationState::Attack3, "player_attack3", 3, 0.101f, { 128, 128 }, false);
+        animations.addAnimation(AnimationState::Attack1, "player_attack1", 6, 0.06f, { 128, 128 }, false);
+        animations.addAnimation(AnimationState::Attack2, "player_attack2", 4, 0.09f, { 128, 128 }, false);
+        animations.addAnimation(AnimationState::Attack3, "player_attack3", 3, 0.12f, { 128, 128 }, false);
         animations.addAnimation(AnimationState::Jump, "player_jump", 12, 0.08f, { 128, 128 }, false);
         animations.addAnimation(AnimationState::Dash, "player_dash", 2, dashDuration, { 128, 128 }, false);
         animations.addAnimation(AnimationState::Parry, "player_parry", 2, 0.4f, { 128, 128 }, false);
         animations.addAnimation(AnimationState::Dead, "player_dead", 3, 1.0f, { 128, 128 }, false);
+		animations.addAnimation(AnimationState::Hurt, "player_hurt", 2, hurtDuration, { 128, 128 }, false);
         animations.play(AnimationState::Idle);
     }
 
     void update(float dt) {
-        if (!isAlive() && animations.getCurrentState() == AnimationState::Dead) {
-            animations.update(dt); // Only update animation component if dead
-            return;
-        }
-        // Check for death based on health (natural death)
-        if (currentHealth <= 0 && animations.getCurrentState() != AnimationState::Dead) {
-            death();
-		}
+  
+        if (isHurt) { 
+            hurtTimer -= dt; 
+            hurtFlashIntervalTimer -= dt; 
 
-        handleMovement(dt);
-        handleAnimations();
-        updateTimers(dt);
-        animations.update(dt);
+            // Handle flashing
+            if (hurtFlashIntervalTimer <= 0.f) { 
+                hurtFlashIntervalTimer = hurtFlashInterval;
+
+                if (animations.getSprite().getColor() == defaultColor) {
+                    animations.getSprite().setColor(damageColor);
+                }
+                else {
+                    animations.getSprite().setColor(defaultColor);
+                }
+            }
+
+            // Check if hurt duration is over
+            if (hurtTimer <= 0.f) { 
+                isHurt = false; 
+                hurtTimer = 0.f; 
+                animations.getSprite().setColor(defaultColor); //Reset color
+                std::cout << "[Player] Hurt state ended." << std::endl;
+                velocity.x = 0;
+            }
+            else {
+                // While hurt, apply physics (gravity, friction from knockback) but block input
+                handleMovement(dt); // Apply gravity and update position based on knockback velocity
+                animations.update(dt); // Update the Hurt animation frame
+                return; // Skip rest of normal update logic while hurt
+            }
+        } // <-- End of if(isHurt)
+
+        // --- Normal Update Logic (only if not hurt) ---
+        handleMovement(dt);   
+        handleAnimations();     
+        updateTimers(dt);       
+        animations.update(dt);  
     }
 
     void move(sf::Vector2f direction) {
-        if (!isAlive()) return;
+        if (isHurt || !isAlive()) return;
 
         if (dashTimer <= 0 && !isAttacking() && animations.getCurrentState() != AnimationState::Parry) {
             if (direction.x != 0.f) {
@@ -261,7 +288,7 @@ public:
     }
 
     void jump() {
-        if (!isAlive()) return;
+        if (isHurt || !isAlive()) return;
 
         if (isGrounded && !isAttacking() && dashTimer <= 0 && animations.getCurrentState() != AnimationState::Parry) {
             velocity.y = -jumpForce;
@@ -279,7 +306,7 @@ public:
     }
 
     void dash() {
-        if (!isAlive()) return;
+        if (isHurt || !isAlive()) return;
 
         // *** Updated to check against multiple attack states ***
         if (canDash && dashTimer <= 0 && !isAttacking() && animations.getCurrentState() != AnimationState::Parry) {
@@ -293,7 +320,7 @@ public:
     }
 
     void parry() {
-        if (!isAlive()) return;
+        if (isHurt || !isAlive()) return;
 
         if (canParry && !isAttacking() && dashTimer <= 0) { 
             animations.play(AnimationState::Parry);
@@ -306,7 +333,7 @@ public:
     }
 
     void attack() {
-        if (!isAlive()) return;
+        if (isHurt || !isAlive()) return;
 
         if (canAttack && !isAttacking() && dashTimer <= 0 && animations.getCurrentState() != AnimationState::Parry) {
             int attackIndex = attackDistribution(rng); // Generate 0, 1, or 2
@@ -324,12 +351,31 @@ public:
     }
 
     void takeDamage(int amount) {
-        // *** MODIFIED: Check if already dead OR in Dead animation state ***
-        if (!isAlive() || animations.getCurrentState() == AnimationState::Dead) return; // Already dead or dying
+        // Prevent taking damage if already dead, or already in the hurt state (prevents chain-stuns)
+        if (!isAlive() || animations.getCurrentState() == AnimationState::Dead || isHurt) {
+            return;
+        }
 
         currentHealth -= amount;
-        currentHealth = std::max(0, currentHealth); // Clamp health at 0
+        currentHealth = std::max(0, currentHealth);
         std::cout << "[Player] Took " << amount << " damage. Health: " << currentHealth << "/" << maxHealth << std::endl;
+        if (currentHealth <= 0) {
+            death(); // Call the death function if health is 0 or less
+        }
+        else { 
+            isHurt = true;
+            hurtTimer = hurtDuration;
+            hurtFlashIntervalTimer = 0.f; // Start flash immediately
+            animations.getSprite().setColor(damageColor); // Start flash with red color
+            animations.play(AnimationState::Hurt);
+
+            velocity.x = -knockbackForceX; // Assuming knockback is always left relative to the player's original facing
+            velocity.y = knockbackForceY; // Apply vertical knockback
+            isGrounded = false; // Knockback usually puts you airborne briefly
+
+            std::cout << "[Player] Hurt state applied with knockback!" << std::endl;
+        }
+     
     }
 
     int getHealth() const { return currentHealth; }
@@ -374,6 +420,18 @@ private:
     bool canParry = true;
     float parryCooldown = 1.0f;
     float parryTimer = 0.f; 
+
+    // *** ADDED: Knockback Variables ***
+    float knockbackForceX = 60.f; // Horizontal knockback speed
+    float knockbackForceY = -300.f; // Vertical knockback speed (negative is upwards)
+
+    bool isHurt = false;            
+    float hurtDuration = 0.4f;      
+    float hurtTimer = 0.f;        
+    float hurtFlashInterval = 0.08f; 
+    float hurtFlashIntervalTimer = 0.f; 
+    sf::Color defaultColor = sf::Color::White;
+    sf::Color damageColor = sf::Color(255, 80, 80, 230); // Red tint
 
     std::random_device rd;
     std::mt19937 rng;
@@ -426,7 +484,7 @@ private:
         animations.getSprite().setPosition(position);
 
         // Flip sprite based on movement direction, but NOT during attacks/dash/parry
-        if (!isAttacking() && dashTimer <= 0 && animations.getCurrentState() != AnimationState::Parry) {
+        if (!isAttacking() && dashTimer <= 0 && animations.getCurrentState() != AnimationState::Parry &&!isHurt) {
             float currentScaleX = animations.getSprite().getScale().x;
             if (velocity.x > 0.1f && currentScaleX < 0.f) { // Moving right, facing left
                 animations.getSprite().setScale(1.f, 1.f);
@@ -449,6 +507,15 @@ private:
 
         if (currentState == AnimationState::Dead) {
             return; // Do not change animation if dead
+        }
+
+        if (isHurt) { 
+            // Ensure hurt animation is playing (or let it finish if non-looping)
+            if (currentState != AnimationState::Hurt) { 
+                animations.play(AnimationState::Hurt); 
+            }
+ 
+            return; // Don't change animation while hurt state is active
         }
 
         // Allow uninterruptible, non-looping animations (Attack, Dash, Parry, Jump) to finish
@@ -530,7 +597,6 @@ public:
         window.setFramerateLimit(60);
         window.setVerticalSyncEnabled(true); 
         loadResources();
-        initViews();
         initBackground();
         setupUI();
     }
@@ -550,10 +616,9 @@ public:
 
 private:
     sf::RenderWindow window;
-    sf::View gameView;
+    sf::View gameView = window.getDefaultView();
     sf::Sprite background;
     Player player;
-
 
     sf::RectangleShape playerHealthBarBackground;
     sf::RectangleShape playerHealthBarFill;
@@ -566,11 +631,7 @@ private:
     void loadResources() {
         TextureManager::instance().load("background", "../assets/background.png");
     }
-
-    void initViews() {
-        gameView = window.getDefaultView();
-    }
-
+ 
     void initBackground() {
         sf::Texture* bgTexture = TextureManager::instance().get("background");
         if (bgTexture) {
