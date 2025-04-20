@@ -17,7 +17,6 @@ public:
     // Destructor to clean up raw pointers
     ~TextureManager() {
         std::cout << "[TextureManager] Cleaning up textures..." << std::endl;
-
         for (auto const& [id, ptr] : textures) {
             if (ptr) {
                 delete ptr;
@@ -53,6 +52,7 @@ public:
             return it->second;
         }
         else {
+             std::cerr << "[TextureManager] Error: Texture not found: " << id << std::endl;
             return nullptr;
         }
     }
@@ -69,7 +69,11 @@ private:
 
 // --- Animation State Enum ---
 enum class AnimationState {
-    Idle, Run, Jump, Attack1, Attack2, Attack3, Parry, Dash, Dead, Hurt, None
+    // Player States
+    Idle, Run, Jump, Attack1, Attack2, Attack3, Parry, Dash, Dead, Hurt,
+    // Boss States
+    BossIdle, BossAttack1, BossAttack2, BossUltimate, BossHurt, BossDead, BossMove,
+    None
 };
 
 // --- Animation Component ---
@@ -90,7 +94,7 @@ public:
         const sf::Texture* texturePtr = TextureManager::instance().get(textureId);
         if (texturePtr) {
             animations[state] = { texturePtr, frameCount, frameDuration, frameSize, loops };
-            if (sprite.getTexture() == nullptr) {
+            if (sprite.getTexture() == nullptr) { 
                 sprite.setTexture(*texturePtr);
                 sprite.setOrigin(static_cast<float>(frameSize.x) / 2.f, static_cast<float>(frameSize.y) / 2.f);
             }
@@ -105,24 +109,31 @@ public:
         if (currentState != AnimationState::None && animations.count(currentState)) {
             auto& anim = animations[currentState];
 
-
-            if (!anim.loops && isDone()) {
+ 
+            if (!anim.texture) {
+                 std::cerr << "[AnimationComponent] Error: Update called on state " << static_cast<int>(currentState) << " with null texture." << std::endl;
                 return;
             }
 
+            if (!anim.loops && isDone()) {
+                return; // Don't update non-looping finished animations
+            }
             elapsedTime += dt;
 
             if (elapsedTime >= anim.frameDuration) {
-                elapsedTime -= anim.frameDuration;
-                currentFrame++;
+                // Use integer division to handle potential frame skips if dt is large
+                int frameAdvancement = static_cast<int>(elapsedTime / anim.frameDuration);
+                elapsedTime = std::fmod(elapsedTime, anim.frameDuration); // Keep remainder
+
+                currentFrame += frameAdvancement;
 
                 if (currentFrame >= anim.frameCount) {
                     if (anim.loops) {
-                        currentFrame = 0;
+                        currentFrame %= anim.frameCount; // Loop back
                     }
                     else {
-                        // Clamp to the last frame for non-looping animations
-                        currentFrame = anim.frameCount - 1;
+                        currentFrame = anim.frameCount - 1; // Clamp to last frame
+                        _isDone = true;
                     }
                 }
 
@@ -135,21 +146,13 @@ public:
     }
 
     void play(AnimationState state) {
-        // Only switch if the requested state is different OR if we want to restart a looping anim (optional)
-        // For now, only switch if different and valid
-        if (state != currentState && animations.count(state)) {
-            currentState = state;
+        if (state != currentState || !animations[state].loops) { // Allow restarting non-looping
             const auto& anim = animations[state];
 
-            if (anim.texture == nullptr) {
-                std::cerr << "[AnimationComponent] Warning: Attempting to play animation state "
-                    << static_cast<int>(state) << " with null texture." << std::endl;
-                currentState = AnimationState::None;
-                return;
-            }
-
+            currentState = state;
             currentFrame = 0;
             elapsedTime = 0.f;
+            _isDone = false;
 
             sprite.setTexture(*anim.texture);
             sprite.setTextureRect(sf::IntRect(0, 0, anim.frameSize.x, anim.frameSize.y));
@@ -159,21 +162,20 @@ public:
 
     bool isDone() const {
         if (currentState != AnimationState::None && animations.count(currentState)) {
-            // Use find to avoid exception if state somehow becomes invalid after count check
-            auto it = animations.find(currentState);
-            if (it != animations.end()) {
-                const auto& anim = it->second;
-                return !anim.loops && (currentFrame >= anim.frameCount - 1);
-            }
+            const auto& anim = animations.at(currentState);
+            return !anim.loops && _isDone;
         }
-        // If no animation is playing or state is invalid, consider it "done"
-        return true;
+        return true; 
     }
-
 
     AnimationState getCurrentState() const { return currentState; }
     sf::Sprite& getSprite() { return sprite; }
     const sf::Sprite& getSprite() const { return sprite; }
+
+    //get functions
+    int getCurrentFrameIndex() const { return currentFrame; }
+    float getElapsedTimeInState() const { return elapsedTime + currentFrame * (animations.count(currentState) ? animations.at(currentState).frameDuration : 0.f); }
+
 
 private:
     sf::Sprite sprite;
@@ -181,19 +183,335 @@ private:
     AnimationState currentState = AnimationState::None;
     int currentFrame = 0;
     float elapsedTime = 0.f;
+    bool _isDone = false; // Internal flag for non-looping animations
+};
+
+
+// Forward declaration needed for Boss constructor
+class Player;
+
+// --- Boss Class ---
+class Boss {
+public:
+    enum class BossState {
+        Idle, Attacking, Ultimate, Moving, Hurt, Dead
+    };
+
+    Boss(sf::Vector2f startPos, Player* playerTarget, float bLeft, float bRight, int maxHealth = 500) :
+        position(startPos),
+        targetPlayer(playerTarget),
+        leftBoundary(bLeft),
+        rightBoundary(bRight),
+        maxHealth(maxHealth),
+        currentHealth(maxHealth),
+        currentState(BossState::Idle),
+        rng(rd()) // Initialize member RNG
+    {
+        loadResources();
+        initAnimations();
+        animations.getSprite().setPosition(position);
+        animations.getSprite().setScale(-1.f, 1.f);
+        // Initialize RNG distributions
+        actionChoiceDistribution = std::uniform_int_distribution<int>(0, 2); // Attack1, Attack2, Move
+        moveDirectionDistribution = std::uniform_int_distribution<int>(0, 1); // Left, Right
+        moveDurationDistribution = std::uniform_real_distribution<float>(minMoveDuration, maxMoveDuration);
+        attackChoiceDistribution = std::uniform_int_distribution<int>(0, 1); // Basic attack choice
+        startActionDelay();
+    }
+
+    void loadResources() {
+        auto& tm = TextureManager::instance();
+        if (!tm.load("boss_idle", "../assets/boss/Idle.png")) { std::cout << "boss idle not found"; }
+        if (!tm.load("boss_attack1", "../assets/boss/Attack1.png")) { std::cout << "boss attack1 not found"; }
+        if (!tm.load("boss_attack2", "../assets/boss/Attack2.png")) { std::cout << "boss attack2 not found"; }
+        if (!tm.load("boss_ultimate", "../assets/boss/Ultimate.png")) { std::cout << "boss ultimate not found"; }
+        if (!tm.load("boss_hurt", "../assets/boss/Hurt.png")) { std::cout << "boss hurt not found"; }
+        if (!tm.load("boss_dead", "../assets/boss/Dead.png")) { std::cout << "boss dead not found"; }
+        if (!tm.load("boss_run", "../assets/boss/Run.png")) { std::cout << "boss run not found"; } 
+    }
+
+    void initAnimations() {
+        //                                                  ---  frame counts, durations, sizes, looping---
+        animations.addAnimation(AnimationState::BossIdle, "boss_idle", 8, 0.15f, { 800, 800 }, true);
+        animations.addAnimation(AnimationState::BossAttack1, "boss_attack1", 8, 0.12f, { 250, 250 }, false);
+        animations.addAnimation(AnimationState::BossAttack2, "boss_attack2", 8, 0.12f, { 250, 250 }, false);
+        animations.addAnimation(AnimationState::BossUltimate, "boss_ultimate", 2, 0.5f, { 250, 250 }, false);
+        animations.addAnimation(AnimationState::BossHurt, "boss_hurt", 3, 0.133f, { 250, 250 }, false);
+        animations.addAnimation(AnimationState::BossDead, "boss_dead", 9, 0.18f, { 250, 250 }, false);
+        animations.addAnimation(AnimationState::BossMove, "boss_run", 8, 0.1f, { 250, 250 }, true);
+        animations.play(AnimationState::BossIdle);
+    }
+
+    void update(float dt) {
+        if (currentState == BossState::Dead) {
+            animations.update(dt);
+            return;
+        }
+        updateTimers(dt);
+        if (isHurt) {
+            handleHurtState(dt);
+            animations.update(dt);
+            return;
+        }
+        timeSinceLastAction += dt;
+        if (currentState == BossState::Idle && timeSinceLastAction >= currentActionDelay) {
+            chooseNextAction();
+        }
+        if (currentState == BossState::Moving) {
+            handleMovement(dt);
+        }
+        if (currentState == BossState::Attacking || currentState == BossState::Ultimate) {
+            if (animations.isDone()) {
+                setState(BossState::Idle);
+                startActionDelay();
+                attackActive = false;
+            }
+            else {
+                checkAttackTiming();
+            }
+        }
+        animations.update(dt);
+        animations.getSprite().setPosition(position);
+    }
+
+    void takeDamage(int amount) {
+        if (currentState == BossState::Dead || isHurt) return;
+        currentHealth -= amount;
+        currentHealth = std::max(0, currentHealth);
+         std::cout << "[Boss] Took " << amount << " damage. Health: " << currentHealth << "/" << maxHealth << std::endl;
+        if (currentHealth <= 0) {
+            death();
+        }
+        else {
+            setState(BossState::Hurt);
+            animations.play(AnimationState::BossHurt);
+            isHurt = true;
+            hurtTimer = hurtDuration;
+            hurtFlashIntervalTimer = 0.f;
+            animations.getSprite().setColor(damageColor);
+            velocity = { 0.f, 0.f };
+            attackActive = false;
+            // std::cout << "[Boss] Hurt state applied!" << std::endl;
+        }
+    }
+
+    void death() {
+        if (currentState != BossState::Dead) {
+            // std::cout << "[Boss] Death triggered!" << std::endl;
+            setState(BossState::Dead);
+            animations.play(AnimationState::BossDead);
+            currentHealth = 0;
+            isHurt = false;
+            animations.getSprite().setColor(defaultColor);
+            velocity = { 0.f, 0.f };
+            attackActive = false;
+        }
+    }
+
+    void draw(sf::RenderTarget& target) const {
+        target.draw(animations.getSprite());
+    }
+
+    sf::FloatRect getGlobalBounds() const { // Used for basic collision
+        return animations.getSprite().getGlobalBounds();
+    }
+
+    bool isAlive() const {
+        return currentState != BossState::Dead;
+    }
+
+    bool isAttackActive() const {
+        return attackActive;
+    }
+
+    int getHealth() const { return currentHealth; }
+    int getMaxHealth() const { return maxHealth; }
+
+
+private:
+    AnimationComponent animations;
+    sf::Vector2f position;
+    sf::Vector2f velocity = { 0.f, 0.f };
+    Player* targetPlayer = nullptr;
+    float leftBoundary;
+    float rightBoundary;
+    int maxHealth;
+    int currentHealth;
+    BossState currentState = BossState::Idle;
+    float moveSpeed = 120.f;
+    float moveTimer = 0.f;
+    float minMoveDuration = 0.5f;
+    float maxMoveDuration = 1.5f;
+    float timeSinceLastAction = 0.f;
+    float currentActionDelay = 2.0f;
+    float attackCooldown1 = 1.5f;
+    float attackCooldown2 = 2.5f;
+    float ultimateCooldown = 15.0f;
+    float currentAttackCooldown1 = 0.f;
+    float currentAttackCooldown2 = 0.f;
+    float currentUltimateCooldown = 0.f;
+    bool attackActive = false;
+    bool isHurt = false;
+    float hurtDuration = 0.4f;
+    float hurtTimer = 0.f;
+    float hurtFlashInterval = 0.08f;
+    float hurtFlashIntervalTimer = 0.f;
+    sf::Color defaultColor = sf::Color::White;
+    sf::Color damageColor = sf::Color(200, 80, 80, 200);
+    std::random_device rd;
+    std::mt19937 rng;
+    std::uniform_int_distribution<int> actionChoiceDistribution;
+    std::uniform_int_distribution<int> moveDirectionDistribution;
+    std::uniform_real_distribution<float> moveDurationDistribution;
+    std::uniform_int_distribution<int> attackChoiceDistribution;
+
+    void setState(BossState newState) {
+        if (currentState != newState) {
+            currentState = newState;
+            if (newState == BossState::Idle) {
+                velocity.x = 0;
+                animations.play(AnimationState::BossIdle);
+            }
+            else if (newState == BossState::Moving) {
+                // Play move animation if it exists, otherwise idle
+                if (TextureManager::instance().get("boss_run")) {
+                    animations.play(AnimationState::BossMove);
+                }
+                else {
+                    animations.play(AnimationState::BossIdle);
+                }
+            } // Other states handle their animation in performAttack/death/takeDamage
+        }
+    }
+
+    void startActionDelay() {
+        std::uniform_real_distribution<float> delayVar(0.8f, 1.3f);
+        currentActionDelay = 1.8f * delayVar(rng);
+        timeSinceLastAction = 0.f;
+    }
+
+    void chooseNextAction() {
+        if (currentUltimateCooldown <= 0.f && targetPlayer && isAlive()) {
+            performUltimate(); return;
+        }
+        int action = actionChoiceDistribution(rng);
+        if (action == 0 && currentAttackCooldown1 <= 0.f) performAttack1();
+        else if (action == 1 && currentAttackCooldown2 <= 0.f) performAttack2();
+        else if (action == 2) startMoving();
+        else { // Fallback
+            if (currentAttackCooldown1 <= 0.f && action != 0) performAttack1();
+            else if (currentAttackCooldown2 <= 0.f && action != 1) performAttack2();
+            else if (action != 2) startMoving();
+            else startActionDelay();
+        }
+    }
+
+    void startMoving() {
+        int direction = moveDirectionDistribution(rng);
+        float targetSpeed = (direction == 0) ? -moveSpeed : moveSpeed;
+        const float halfWidth = getGlobalBounds().width / 2.f;
+        if ((direction == 0 && position.x - halfWidth <= leftBoundary) ||
+            (direction == 1 && position.x + halfWidth >= rightBoundary))
+        {
+            startActionDelay(); return;
+        }
+        setState(BossState::Moving);
+        velocity.x = targetSpeed;
+        moveTimer = moveDurationDistribution(rng);
+    }
+
+    void performAttack1() {
+        setState(BossState::Attacking);
+        animations.play(AnimationState::BossAttack1);
+        currentAttackCooldown1 = attackCooldown1;
+        timeSinceLastAction = 0.f;
+        velocity.x = 0;
+    }
+
+    void performAttack2() {
+        setState(BossState::Attacking);
+        animations.play(AnimationState::BossAttack2);
+        currentAttackCooldown2 = attackCooldown2;
+        timeSinceLastAction = 0.f;
+        velocity.x = 0;
+    }
+
+    void performUltimate() {
+        setState(BossState::Ultimate);
+        animations.play(AnimationState::BossUltimate);
+        currentUltimateCooldown = ultimateCooldown;
+        timeSinceLastAction = 0.f;
+        velocity.x = 0;
+    }
+
+    void handleMovement(float dt) {
+        moveTimer -= dt;
+        sf::Vector2f proposedPosition = position + velocity * dt;
+        const float halfWidth = getGlobalBounds().width / 2.f;
+        bool hitBoundary = false;
+        if (proposedPosition.x - halfWidth <= leftBoundary) {
+            proposedPosition.x = leftBoundary + halfWidth; hitBoundary = true;
+        }
+        else if (proposedPosition.x + halfWidth >= rightBoundary) {
+            proposedPosition.x = rightBoundary - halfWidth; hitBoundary = true;
+        }
+        position = proposedPosition;
+        if (moveTimer <= 0.f || hitBoundary) {
+            velocity.x = 0.f; moveTimer = 0.f;
+            setState(BossState::Idle); startActionDelay();
+        }
+    }
+
+    void updateTimers(float dt) {
+        if (currentAttackCooldown1 > 0.f) currentAttackCooldown1 -= dt;
+        if (currentAttackCooldown2 > 0.f) currentAttackCooldown2 -= dt;
+        if (currentUltimateCooldown > 0.f) currentUltimateCooldown -= dt;
+        if (isHurt && hurtTimer > 0.f) {
+            hurtTimer -= dt;
+            if (hurtTimer <= 0.f) {
+                isHurt = false; hurtTimer = 0.f;
+                animations.getSprite().setColor(defaultColor);
+                if (isAlive()) { setState(BossState::Idle); startActionDelay(); }
+            }
+        }
+    }
+
+    void handleHurtState(float dt) {
+        hurtFlashIntervalTimer -= dt;
+        if (hurtFlashIntervalTimer <= 0.f) {
+            hurtFlashIntervalTimer = hurtFlashInterval;
+            animations.getSprite().setColor(
+                (animations.getSprite().getColor() == defaultColor) ? damageColor : defaultColor
+            );
+        }
+    }
+
+    void checkAttackTiming() {
+        AnimationState animState = animations.getCurrentState();
+        int currentFrame = animations.getCurrentFrameIndex();
+        bool activate = false;
+        if (animState == AnimationState::BossAttack1 && currentFrame >= 3 && currentFrame <= 6) activate = true;
+        else if (animState == AnimationState::BossAttack2 && currentFrame >= 4 && currentFrame <= 8) activate = true;
+        else if (animState == AnimationState::BossUltimate && currentFrame >= 6 && currentFrame <= 12) activate = true;
+        attackActive = activate;
+    }
 };
 
 
 // --- Player Class ---
 class Player {
 public:
-    Player(int maxHealth = 100, int currentHealth = 100) : maxHealth(maxHealth), currentHealth(currentHealth) {
+    Player(int maxHealth = 100, int currentHealth = 100) :
+        maxHealth(maxHealth),
+        currentHealth(currentHealth),
+        rng(rd()) // Initialize member RNG
+    {
         loadResources();
         initAnimations();
         position = { 200.f, 500.f };
         animations.getSprite().setPosition(position);
 
-        rng = std::mt19937(rd());
+        // Initialize RNG distribution using member rng
         attackDistribution = std::uniform_int_distribution<int>(0, 2); // For 3 attack types (0, 1, 2)
         attackStates = { AnimationState::Attack1, AnimationState::Attack2, AnimationState::Attack3 }; // Store attack states
     }
@@ -209,49 +527,45 @@ public:
         tm.load("player_dash", "../assets/player/Dash.png");
         tm.load("player_parry", "../assets/player/Parry.png");
         tm.load("player_dead", "../assets/player/Dead.png");
-		tm.load("player_hurt", "../assets/player/Hurt.png");
+        tm.load("player_hurt", "../assets/player/Hurt.png");
     }
 
     void initAnimations() {
-        // Adjust frame counts, durations, sizes, loops to match your assets
+        // Adjust frame counts, durations, sizes, loops assets
         animations.addAnimation(AnimationState::Idle, "player_idle", 8, 0.2f, { 160, 128 }, true);
         animations.addAnimation(AnimationState::Run, "player_run", 8, 0.1f, { 160, 128 }, true);
         animations.addAnimation(AnimationState::Attack1, "player_attack1", 6, 0.06f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Attack2, "player_attack2", 5, 0.09f, { 160, 128 }, false);
-        animations.addAnimation(AnimationState::Attack3, "player_attack3", 10, 0.04f, { 160, 128 }, false);
-        animations.addAnimation(AnimationState::Jump, "player_jump", 12, 0.08f, { 160, 128 }, false);
-        animations.addAnimation(AnimationState::Dash, "player_dash", 5, dashDuration, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Attack3, "player_attack3", 16, 0.026f, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Jump, "player_jump", 11, 0.08f, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Dash, "player_dash", 5, 0.036f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Parry, "player_parry", 6, 0.08f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Dead, "player_dead", 7, 0.2f, { 160, 128 }, false);
-		animations.addAnimation(AnimationState::Hurt, "player_hurt", 2, hurtDuration, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Hurt, "player_hurt", 2, hurtDuration, { 160, 128 }, false); 
         animations.play(AnimationState::Idle);
     }
 
     void update(float dt) {
-  
-        if (isHurt) { 
-            hurtTimer -= dt; 
-            hurtFlashIntervalTimer -= dt; 
+
+        if (isHurt) {
+            hurtTimer -= dt;
+            hurtFlashIntervalTimer -= dt;
 
             // Handle flashing
-            if (hurtFlashIntervalTimer <= 0.f) { 
+            if (hurtFlashIntervalTimer <= 0.f) {
                 hurtFlashIntervalTimer = hurtFlashInterval;
-
-                if (animations.getSprite().getColor() == defaultColor) {
-                    animations.getSprite().setColor(damageColor);
-                }
-                else {
-                    animations.getSprite().setColor(defaultColor);
-                }
+                animations.getSprite().setColor(
+                    (animations.getSprite().getColor() == defaultColor) ? damageColor : defaultColor
+                );
             }
 
             // Check if hurt duration is over
-            if (hurtTimer <= 0.f) { 
-                isHurt = false; 
-                hurtTimer = 0.f; 
+            if (hurtTimer <= 0.f) {
+                isHurt = false;
+                hurtTimer = 0.f;
                 animations.getSprite().setColor(defaultColor); //Reset color
-                std::cout << "[Player] Hurt state ended." << std::endl;
-                velocity.x = 0;
+                // std::cout << "[Player] Hurt state ended." << std::endl;
+				velocity.x = 0; // set 0 so player doesn't turn around
             }
             else {
                 // While hurt, apply physics (gravity, friction from knockback) but block input
@@ -259,31 +573,29 @@ public:
                 animations.update(dt); // Update the Hurt animation frame
                 return; // Skip rest of normal update logic while hurt
             }
-        } // <-- End of if(isHurt)
+        }
 
         // --- Normal Update Logic (only if not hurt) ---
-        handleMovement(dt);   
-        handleAnimations();     
-        updateTimers(dt);       
-        animations.update(dt);  
+        handleMovement(dt);
+        handleAnimations();
+        updateTimers(dt);
+        animations.update(dt);
     }
 
     void move(sf::Vector2f direction) {
-        if (isHurt || !isAlive()) return;
+        if (isHurt || !isAlive()) return; // Block input if hurt or dead
 
-        if (dashTimer <= 0 && !isAttacking() && animations.getCurrentState() != AnimationState::Parry) {
+        // Allow movement unless dashing or attacking/parrying on the ground
+        if (dashTimer <= 0 && !(isGrounded && (isAttacking() || animations.getCurrentState() == AnimationState::Parry))) {
             if (direction.x != 0.f) {
                 velocity.x = direction.x > 0 ? moveSpeed : -moveSpeed;
-                facingRight = direction.x > 0;
             }
             else {
-                velocity.x = 0.f;
+                velocity.x = 0.f; // Explicitly stop if no horizontal input
             }
         }
-        else if (dashTimer <= 0) { // If attacking or parrying
-            if (isGrounded) {
-                velocity.x = 0.f; // Stop horizontal movement while attacking/parrying on ground
-            }
+        else if (isGrounded && (isAttacking() || animations.getCurrentState() == AnimationState::Parry)) {
+            velocity.x = 0.f; // Stop horizontal movement when attacking/parrying on ground
         }
     }
 
@@ -297,18 +609,21 @@ public:
     }
 
     void death() {
+        if (animations.getCurrentState() == AnimationState::Dead) return;
+
         animations.play(AnimationState::Dead);
         velocity.x = 0; // Stop movement
         velocity.y = 0; // Stop gravity/jump
         currentHealth = 0; // Ensure health is set to 0
-        isGrounded = true; 
-        std::cout << "[Player] Death triggered!" << std::endl;
+        isGrounded = true; // Keep death anim on ground
+        isHurt = false; // Not hurt anymore
+        animations.getSprite().setColor(defaultColor); // Reset color
+        // std::cout << "[Player] Death triggered!" << std::endl;
     }
 
     void dash() {
         if (isHurt || !isAlive()) return;
 
-        // *** Updated to check against multiple attack states ***
         if (canDash && dashTimer <= 0 && !isAttacking() && animations.getCurrentState() != AnimationState::Parry) {
             velocity.x = facingRight ? dashSpeed : -dashSpeed;
             velocity.y = 0; // Dash is horizontal
@@ -322,7 +637,7 @@ public:
     void parry() {
         if (isHurt || !isAlive()) return;
 
-        if (canParry && !isAttacking() && dashTimer <= 0) { 
+        if (canParry && !isAttacking() && dashTimer <= 0) {
             animations.play(AnimationState::Parry);
             canParry = false;
             parryTimer = parryCooldown;
@@ -359,29 +674,29 @@ public:
         currentHealth -= amount;
         currentHealth = std::max(0, currentHealth);
         std::cout << "[Player] Took " << amount << " damage. Health: " << currentHealth << "/" << maxHealth << std::endl;
-        if (currentHealth <= 0) {
-            death(); // Call the death function if health is 0 or less
-        }
-        else { 
+        if (isAlive()) {
             isHurt = true;
             hurtTimer = hurtDuration;
             hurtFlashIntervalTimer = 0.f; // Start flash immediately
             animations.getSprite().setColor(damageColor); // Start flash with red color
             animations.play(AnimationState::Hurt);
 
-            velocity.x = -knockbackForceX; 
+            velocity.x = -knockbackForceX; //knock back always to the left
             velocity.y = knockbackForceY;
-            isGrounded = false; 
+            isGrounded = false; // Become airborne
 
-            std::cout << "[Player] Hurt state applied with knockback!" << std::endl;
+            // std::cout << "[Player] Hurt state applied with knockback!" << std::endl;
         }
-     
+        else {
+            death(); // Call the death function if health is 0 or less
+        }
     }
 
     int getHealth() const { return currentHealth; }
     int getMaxHealth() const { return maxHealth; }
     bool isAlive() const { return currentHealth > 0; }
 
+    // Use visual bounds for collision checks as per original code
     sf::FloatRect getGlobalBounds() const {
         return animations.getSprite().getGlobalBounds();
     }
@@ -390,27 +705,35 @@ public:
         target.draw(animations.getSprite());
     }
 
-private: 
+    // Added helper for collision detection logic
+    bool isAttacking() const {
+        AnimationState current = animations.getCurrentState();
+        return current == AnimationState::Attack1 ||
+            current == AnimationState::Attack2 ||
+            current == AnimationState::Attack3;
+    }
+
+private:
     AnimationComponent animations;
     sf::Vector2f position = { 0.f, 0.f };
     sf::Vector2f velocity = { 0.f, 0.f };
     bool facingRight = true;
-    bool isGrounded = true; 
-    const float LEFT_BOUNDARY = 1.0f;
+    bool isGrounded = true;
+    const float LEFT_BOUNDARY = 1.0f; 
 
     int maxHealth;
     int currentHealth;
 
     float moveSpeed = 300.f;
     float jumpForce = 700.f;
-    float gravity = 1800.f; 
-    const float groundLevel = 485.f;
+    float gravity = 1800.f;
+    const float groundLevel = 485.f; 
 
     bool canDash = true;
     float dashSpeed = 700.f;
-    float dashDuration = 0.15f; 
+    float dashDuration = 0.15f;
     float dashTimer = 0.f;
-    float dashCooldown = 0.8f; 
+    float dashCooldown = 0.8f;
     float dashCooldownTimer = 0.f;
 
     bool canAttack = true;
@@ -418,33 +741,25 @@ private:
     float attackTimer = 0.f;
 
     bool canParry = true;
-    float parryCooldown = 1.0f;
-    float parryTimer = 0.f; 
+    float parryCooldown = 0.8f;
+    float parryTimer = 0.f;
 
-    // *** ADDED: Knockback Variables ***
     float knockbackForceX = 60.f; // Horizontal knockback speed
-    float knockbackForceY = -300.f; // Vertical knockback speed (negative is upwards)
+    float knockbackForceY = -300.f; // Vertical knockback speed
 
-    bool isHurt = false;            
-    float hurtDuration = 0.4f;      
-    float hurtTimer = 0.f;        
-    float hurtFlashInterval = 0.08f; 
-    float hurtFlashIntervalTimer = 0.f; 
+    bool isHurt = false;
+    float hurtDuration = 0.4f;
+    float hurtTimer = 0.f;
+    float hurtFlashInterval = 0.08f;
+    float hurtFlashIntervalTimer = 0.f;
     sf::Color defaultColor = sf::Color::White;
     sf::Color damageColor = sf::Color(255, 80, 80, 230); // Red tint
 
     std::random_device rd;
     std::mt19937 rng;
     std::uniform_int_distribution<int> attackDistribution;
-    std::vector<AnimationState> attackStates; 
+    std::vector<AnimationState> attackStates;
 
-    // check if currently in any attack animation
-    bool isAttacking() const {
-        AnimationState current = animations.getCurrentState();
-        return current == AnimationState::Attack1 ||
-            current == AnimationState::Attack2 ||
-            current == AnimationState::Attack3;
-    }
 
     void handleMovement(float dt) {
         // Apply gravity ONLY if not dashing
@@ -463,40 +778,47 @@ private:
             if (velocity.y > 0) { // Only stop downward velocity and set grounded if falling onto ground
                 velocity.y = 0;
                 isGrounded = true;
-                if (dashCooldownTimer <= 0) { // Only reset if not already on cooldown
+                // Reset dash on landing if cooldown is over
+                if (dashCooldownTimer <= 0) {
                     canDash = true;
                 }
             }
         }
         else {
-            isGrounded = false;
+            // If not on ground level, potentially airborne
+            // Set isGrounded false only if moving upwards or has significant downward velocity
+            if (velocity.y < -0.1f || velocity.y > 0.1f) {
+                isGrounded = false;
+            }
         }
 
-        // 2. Left Boundary Collision
-        const float halfWidth = animations.getSprite().getLocalBounds().width / 6.0f; 
-        if (proposedPosition.x - halfWidth < LEFT_BOUNDARY) {
-            proposedPosition.x = LEFT_BOUNDARY + halfWidth;
-            velocity.x = 0; // Stop horizontal movement when hitting left wall
-        }
 
-        // --- Update Position ---
+        const float LEFT_BOUNDARY = 25.0f;  // Hardcoded left limit
+        // Left boundary check
+        if (proposedPosition.x < LEFT_BOUNDARY) {
+            proposedPosition.x = LEFT_BOUNDARY;  // Snap to boundary
+            if (velocity.x < 0) velocity.x = 0;  // Stop leftward movement
+        }
+  
+       // --- Update Position ---
         position = proposedPosition;
         animations.getSprite().setPosition(position);
 
-        // Flip sprite based on movement direction, but NOT during attacks/dash/parry
-        if (!isAttacking() && dashTimer <= 0 && animations.getCurrentState() != AnimationState::Parry &&!isHurt) {
+        // Flip sprite based on movement direction, but NOT during attacks/dash/parry/hurt
+        if (!isAttacking() && dashTimer <= 0 && animations.getCurrentState() != AnimationState::Parry && !isHurt) {
             float currentScaleX = animations.getSprite().getScale().x;
-            if (velocity.x > 0.1f && currentScaleX < 0.f) { // Moving right, facing left
+            // Flip based on velocity
+            if (velocity.x > 1.0f && currentScaleX < 0.f) { // Moving right, facing left
                 animations.getSprite().setScale(1.f, 1.f);
                 facingRight = true;
             }
-            else if (velocity.x < -0.1f && currentScaleX > 0.f) { // Moving left, facing right
+            else if (velocity.x < -1.0f && currentScaleX > 0.f) { // Moving left, facing right
                 animations.getSprite().setScale(-1.f, 1.f);
                 facingRight = false;
             }
         }
         else {
-            // Ensure facing direction variable matches sprite scale even during actions
+            // Ensure facingRight bool matches scale even during actions
             facingRight = animations.getSprite().getScale().x > 0.f;
         }
     }
@@ -509,36 +831,39 @@ private:
             return; // Do not change animation if dead
         }
 
-        if (isHurt) { 
+        if (isHurt) {
             // Ensure hurt animation is playing (or let it finish if non-looping)
-            if (currentState != AnimationState::Hurt) { 
-                animations.play(AnimationState::Hurt); 
+            // This state is primarily handled in update()
+            if (currentState != AnimationState::Hurt && !animations.isDone()) {
+                // If somehow not in Hurt anim but isHurt is true, force it (unless anim just finished)
+                // animations.play(AnimationState::Hurt);
             }
- 
-            return; // Don't change animation while hurt state is active
+            return; // Don't change animation while hurt state is active via hurtTimer
         }
+
 
         // Allow uninterruptible, non-looping animations (Attack, Dash, Parry, Jump) to finish
         bool isUninterruptibleAction = isAttacking() || currentState == AnimationState::Dash || currentState == AnimationState::Parry;
 
         if (isUninterruptibleAction) {
             if (animations.isDone()) {
-                newState = AnimationState::Idle; // Revert to idle after finishing the action
+                newState = isGrounded ? AnimationState::Idle : AnimationState::Jump; // Revert after action
             }
             else {
                 return; // Keep playing the current action animation
             }
         }
-
-
-        // Determine new state based on physics/actions only if not locked in an action
-        if (!isUninterruptibleAction) // Don't check movement states if mid-attack/dash/parry
-        {
-            if (!isGrounded) {            
-                    newState = AnimationState::Jump;            
+        else { // If not in an uninterruptible action
+            if (!isGrounded) {
+                // If airborne and not attacking/dashing/parrying, should be Jumping/Falling
+                 // Only switch to Jump if not already in Jump (or falling variant if you add one)
+                if (currentState != AnimationState::Jump) {
+                    newState = AnimationState::Jump;
+                }
             }
             else { // Player is grounded
-                 if (std::abs(velocity.x) > 10.f) {
+                // Determine Run or Idle based on horizontal velocity
+                if (std::abs(velocity.x) > 10.f) { // Use a threshold
                     newState = AnimationState::Run;
                 }
                 else {
@@ -547,8 +872,13 @@ private:
             }
         }
 
-        animations.play(newState);
+
+        // Only play if the new state is different
+        if (newState != currentState) {
+            animations.play(newState);
+        }
     }
+
 
     void updateTimers(float dt) {
         // Dash Timer (Duration)
@@ -563,7 +893,16 @@ private:
         if (dashCooldownTimer > 0) {
             dashCooldownTimer -= dt;
             if (dashCooldownTimer <= 0) {
-                dashCooldownTimer = 0;   
+                dashCooldownTimer = 0;
+
+                if (isGrounded) {
+                    canDash = true;
+                }
+            }
+        }
+        else {
+            // Ensure canDash is true if cooldown is 0 and player is grounded
+            if (isGrounded && !canDash) {
                 canDash = true;
             }
         }
@@ -592,12 +931,19 @@ private:
 // --- Game Class ---
 class BossGame {
 public:
-    BossGame() : window(sf::VideoMode(1280, 720), "Final Boss"), player()
+    // Define boss boundaries here
+    const float BOSS_LEFT_BOUNDARY = 600.f;
+    const float BOSS_RIGHT_BOUNDARY = 1200.f;
+
+    BossGame() :
+        window(sf::VideoMode(1280, 720), "Final Boss"),
+        player(), // Default player constructor
+        // Initialize Boss, passing target, boundaries, health
+        boss({ 950.f, 460.f }, & player, BOSS_LEFT_BOUNDARY, BOSS_RIGHT_BOUNDARY, 1000)
     {
         window.setFramerateLimit(60);
-        window.setVerticalSyncEnabled(true); 
-        loadResources();
-        initBackground();
+        window.setVerticalSyncEnabled(true);
+        initBackground(); // Load background separately
         setupUI();
     }
 
@@ -616,23 +962,33 @@ public:
 
 private:
     sf::RenderWindow window;
-    sf::View gameView = window.getDefaultView();
+    sf::View gameView=window.getDefaultView();;
     sf::Sprite background;
     Player player;
+    Boss boss; 
 
+    // UI Elements  + Boss Health Bar
     sf::RectangleShape playerHealthBarBackground;
     sf::RectangleShape playerHealthBarFill;
     const float HEALTH_BAR_WIDTH = 300.f;
     const float HEALTH_BAR_HEIGHT = 20.f;
-    const float HEALTH_BAR_PADDING = 10.f;
-    const float HEALTH_BAR_POS_X = 25.f; // Top-left corner X position
-    const float HEALTH_BAR_POS_Y = 25.f; // Top-left corner Y position
+    const float HEALTH_BAR_PADDING = 10.f; // Unused in original positioning logic
+    const float HEALTH_BAR_POS_X = 25.f;
+    const float HEALTH_BAR_POS_Y = 25.f;
 
-    void loadResources() {
-        TextureManager::instance().load("background", "../assets/background.png");
-    }
- 
+    sf::RectangleShape bossHealthBarBackground; 
+    sf::RectangleShape bossHealthBarFill;       
+    const float BOSS_HEALTH_BAR_WIDTH = 400.f;
+    const float BOSS_HEALTH_BAR_HEIGHT = 25.f;
+    const float BOSS_HEALTH_BAR_POS_X = 1280.f - BOSS_HEALTH_BAR_WIDTH - 25.f;
+    const float BOSS_HEALTH_BAR_POS_Y = 25.f;
+
+
     void initBackground() {
+        // Load background using TextureManager
+        if (!TextureManager::instance().load("background", "../assets/background.png")) {
+            std::cerr << "[Game] Failed to load background texture in Texturemanager." << std::endl;
+        }
         sf::Texture* bgTexture = TextureManager::instance().get("background");
         if (bgTexture) {
             background.setTexture(*bgTexture);
@@ -644,7 +1000,6 @@ private:
                     static_cast<float>(window.getSize().y) / textureSize.y
                 );
             }
-            // Set origin to top-left (default)
             background.setPosition(0, 0);
         }
         else {
@@ -662,6 +1017,17 @@ private:
         playerHealthBarFill.setSize(sf::Vector2f(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT)); // Initial full size
         playerHealthBarFill.setFillColor(sf::Color(0, 200, 0, 220)); // Bright green
         playerHealthBarFill.setPosition(HEALTH_BAR_POS_X, HEALTH_BAR_POS_Y); // Position exactly over background
+
+        // Boss Health Bar
+        bossHealthBarBackground.setSize(sf::Vector2f(BOSS_HEALTH_BAR_WIDTH, BOSS_HEALTH_BAR_HEIGHT));
+        bossHealthBarBackground.setFillColor(sf::Color(50, 50, 50, 200));
+        bossHealthBarBackground.setOutlineColor(sf::Color::Black);
+        bossHealthBarBackground.setOutlineThickness(2.f);
+        bossHealthBarBackground.setPosition(BOSS_HEALTH_BAR_POS_X, BOSS_HEALTH_BAR_POS_Y);
+
+        bossHealthBarFill.setSize(sf::Vector2f(BOSS_HEALTH_BAR_WIDTH, BOSS_HEALTH_BAR_HEIGHT));
+        bossHealthBarFill.setFillColor(sf::Color(200, 0, 0, 220)); // Red for boss
+        bossHealthBarFill.setPosition(BOSS_HEALTH_BAR_POS_X, BOSS_HEALTH_BAR_POS_Y);
     }
 
     void processInput() {
@@ -672,39 +1038,32 @@ private:
 
             // Handle key presses for single actions (jump, attack, dash, parry, debug)
             if (event.type == sf::Event::KeyPressed) {
-                switch (event.key.code) {
-                case sf::Keyboard::Space:
-                    player.jump();
-                    break;
-                case sf::Keyboard::E: 
-                    player.attack();
-                    break;
-                case sf::Keyboard::LShift:
-                case sf::Keyboard::RShift:
-                    player.dash();
-                    break;
-                case sf::Keyboard::Escape:
-                    window.close();
-                    break;
-                case sf::Keyboard::Q: 
-                    player.parry();
-                    break;
-                case sf::Keyboard::T: // Debug: take damage
-                    player.takeDamage(10);
-                    break;
-                    // *** ADDED: N key press to trigger death DEBUG ***
-                case sf::Keyboard::N:
-                    std::cout << "[Game] N key pressed - Forcing death state." << std::endl;
-                    player.death(); 
-                    break;
+                // Only process game actions if player is alive
+                if (player.isAlive()) {
+                    switch (event.key.code) {
+                    case sf::Keyboard::Space: player.jump(); break;
+                    case sf::Keyboard::E:     player.attack(); break;
+                    case sf::Keyboard::LShift:
+                    case sf::Keyboard::RShift:player.dash(); break;
+                    case sf::Keyboard::Q:     player.parry(); break;
+                        // Debug keys from original
+                    case sf::Keyboard::T: player.takeDamage(10); break;
+                    case sf::Keyboard::N: player.death(); break;
+                        // Add Boss Debug Keys
+                    case sf::Keyboard::Y: boss.takeDamage(50); break;   // Boss take damage
+                    case sf::Keyboard::M: boss.death(); break;           // Force boss death
 
-                default:
-                    break;
+                    default: break; // Ignore other keys for single press actions
+                    }
+                }
+                // Allow Escape key anytime
+                if (event.key.code == sf::Keyboard::Escape) {
+                    window.close();
                 }
             }
 
-            // Handle mouse button presses for actions
-            if (event.type == sf::Event::MouseButtonPressed) {
+            // Handle mouse button presses for actions (only if player alive)
+            if (player.isAlive() && event.type == sf::Event::MouseButtonPressed) {
                 if (event.mouseButton.button == sf::Mouse::Left) {
                     player.attack();
                 }
@@ -722,25 +1081,54 @@ private:
             player.move(movement); // Pass direction based on held keys
         }
         else {
-            //  Ensure movement stops completely if dead
+            // Ensure movement stops completely if dead
             player.move({ 0.f, 0.f });
         }
     }
 
+    // Added for collision logic
+    void handleCollisions() {
+        // Basic collision checks using getGlobalBounds() as in original Player structure
+
+        // --- Player Attack -> Boss ---
+        // Check only if player is attacking and boss is alive
+        if (player.isAttacking() && boss.isAlive()) {
+            // Use player's visual bounds for simplicity, as original had no specific attack box
+            if (player.getGlobalBounds().intersects(boss.getGlobalBounds())) {
+                // TODO: Add cooldown logic to prevent multi-hits per swing
+                boss.takeDamage(15); // Example damage value
+                // Need to prevent continuous damage registration here
+            }
+        }
+
+        // --- Boss Attack -> Player ---
+        // Check only if boss attack is active and player is alive
+        if (boss.isAttackActive() && player.isAlive()) {
+            // Use boss's visual bounds for simplicity
+            if (boss.getGlobalBounds().intersects(player.getGlobalBounds())) {
+                // TODO: Implement parry success check & dash invincibility check
+                // Original player had no parry success or dash invincibility logic implemented
+                player.takeDamage(25); // Example damage value
+                // TODO: Prevent multi-hits from single boss attack
+                // Need cooldown logic on boss attack registration
+            }
+        }
+    }
+
     void updateUI() {
-        // Calculate health percentage
+        // Calculate player health percentage
         float healthPercent = 0.f;
         if (player.getMaxHealth() > 0) { // Avoid division by zero
             healthPercent = static_cast<float>(player.getHealth()) / player.getMaxHealth();
         }
         healthPercent = std::max(0.f, healthPercent); // Ensure percent doesn't go below 0
 
-        // Update the fill bar width
+        // Update the player fill bar width
         playerHealthBarFill.setSize(sf::Vector2f(HEALTH_BAR_WIDTH * healthPercent, HEALTH_BAR_HEIGHT));
 
-        // Change color based on health
-        if (healthPercent <= 0.f) { // Explicitly check for 0 or less
-            playerHealthBarFill.setFillColor(sf::Color(50, 50, 50, 200)); // Match background when dead? Or hide?
+        // Change player health bar color based on health
+        if (healthPercent <= 0.f) {
+            playerHealthBarFill.setFillColor(sf::Color(50, 50, 50, 200)); // Match background when dead?
         }
         else if (healthPercent < 0.33f) {
             playerHealthBarFill.setFillColor(sf::Color(220, 0, 0, 220)); // Red when low
@@ -751,34 +1139,50 @@ private:
         else {
             playerHealthBarFill.setFillColor(sf::Color(0, 200, 0, 220)); // Green when high
         }
+
+        //boss health bar update
+        float bossHealthPercent = 0.f;
+        if (boss.getMaxHealth() > 0) {
+            bossHealthPercent = static_cast<float>(boss.getHealth()) / boss.getMaxHealth();
+        }
+        bossHealthPercent = std::max(0.f, bossHealthPercent);
+        bossHealthBarFill.setSize(sf::Vector2f(BOSS_HEALTH_BAR_WIDTH * bossHealthPercent, BOSS_HEALTH_BAR_HEIGHT));
+        bossHealthBarFill.setFillColor(sf::Color(200, 0, 0, 220));
     }
+
 
     void update(float dt) {
         player.update(dt);
-        updateUI(); // Update health bar
+        boss.update(dt); 
+        handleCollisions(); // collision checks
+        updateUI(); // Update health bars for both
     }
 
     void render() {
-        window.clear(sf::Color::Cyan); // Fallback background color
+        window.clear(sf::Color::Cyan); // Fallback background color from original
 
-        // Draw game world elements using the game view
+        // Draw game world elements 
         window.setView(gameView);
         if (background.getTexture()) {
             window.draw(background);
         }
         player.draw(window);
-        // Draw other game elements (enemies, platforms, etc.) here
+        boss.draw(window); 
+  
 
         // Draw UI elements using the default view (screen coordinates)
-        window.setView(window.getDefaultView());
+        window.setView(window.getDefaultView()); // Switch to default view for UI
         window.draw(playerHealthBarBackground);
         window.draw(playerHealthBarFill);
+        window.draw(bossHealthBarBackground);
+        window.draw(bossHealthBarFill);     
         // Draw other UI elements (score, timer, etc.) here
 
         window.display();
     }
 };
 
+// --- Main Function --- 
 int main() {
     BossGame game;
     game.run();
