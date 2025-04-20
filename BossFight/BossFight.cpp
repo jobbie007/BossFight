@@ -189,12 +189,12 @@ public:
     void initAnimations() {
         //                                                  ---  frame counts, durations, sizes, looping---
         animations.addAnimation(AnimationState::BossIdle, "boss_idle", 8, 0.15f, { 800, 800 }, true);
-        animations.addAnimation(AnimationState::BossAttack1, "boss_attack1", 8, 0.12f, { 250, 250 }, false);
-        animations.addAnimation(AnimationState::BossAttack2, "boss_attack2", 8, 0.12f, { 250, 250 }, false);
-        animations.addAnimation(AnimationState::BossUltimate, "boss_ultimate", 2, 0.5f, { 250, 250 }, false);
-        animations.addAnimation(AnimationState::BossHurt, "boss_hurt", 3, 0.133f, { 250, 250 }, false);
-        animations.addAnimation(AnimationState::BossDead, "boss_dead", 9, 0.18f, { 250, 250 }, false);
-        animations.addAnimation(AnimationState::BossMove, "boss_run", 8, 0.1f, { 250, 250 }, true);
+        animations.addAnimation(AnimationState::BossAttack1, "boss_attack1", 8, 0.12f, { 800, 800 }, false);
+        animations.addAnimation(AnimationState::BossAttack2, "boss_attack2", 8, 0.12f, { 800, 800 }, false);
+        animations.addAnimation(AnimationState::BossUltimate, "boss_ultimate", 2, 0.5f, { 800, 800 }, false);
+        animations.addAnimation(AnimationState::BossHurt, "boss_hurt", 3, 0.133f, { 800, 800 }, false);
+        animations.addAnimation(AnimationState::BossDead, "boss_dead", 9, 0.18f, { 800, 800 }, false);
+        animations.addAnimation(AnimationState::BossMove, "boss_run", 8, 0.1f, { 800, 800 }, true);
         animations.play(AnimationState::BossIdle);
     }
 
@@ -903,7 +903,7 @@ public:
         window(sf::VideoMode(1280, 720), "Final Boss"),
         player(), // Default player constructor
         // Initialize Boss, passing target, boundaries, health
-        boss({ 950.f, 460.f }, & player, BOSS_LEFT_BOUNDARY, BOSS_RIGHT_BOUNDARY, 1000)
+        boss({ 950.f, 385.f }, & player, BOSS_LEFT_BOUNDARY, BOSS_RIGHT_BOUNDARY, 1000)
     {
         window.setFramerateLimit(60);
         window.setVerticalSyncEnabled(true);
