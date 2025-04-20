@@ -8,63 +8,26 @@
 
 // --- Texture Manager ---
 class TextureManager {
+    std::map<std::string, std::unique_ptr<sf::Texture>> textures;
 public:
     static TextureManager& instance() {
         static TextureManager tm;
         return tm;
     }
 
-    // Destructor to clean up raw pointers
-    ~TextureManager() {
-        std::cout << "[TextureManager] Cleaning up textures..." << std::endl;
-        for (auto const& [id, ptr] : textures) {
-            if (ptr) {
-                delete ptr;
-            }
-        }
-        textures.clear();
-        std::cout << "[TextureManager] Cleanup complete." << std::endl;
-    }
-
-    // Load texture, return true on success, false on failure
     bool load(const std::string& id, const std::string& path) {
-        sf::Texture* texture = new sf::Texture();
+        auto texture = std::make_unique<sf::Texture>();
         if (texture->loadFromFile(path)) {
-            auto it = textures.find(id);
-            if (it != textures.end()) {
-                delete it->second;
-            }
-            textures[id] = texture;
-            // std::cout << "[TextureManager] Loaded: " << id << " from " << path << std::endl; // Reduced output
+            textures[id] = std::move(texture);
             return true;
         }
-        else {
-            std::cerr << "[TextureManager] Failed to load texture: " << id << " from " << path << std::endl;
-            delete texture;
-            return false;
-        }
+        return false;
     }
 
-    // Get a pointer to a previously loaded texture, or nullptr if not found
     sf::Texture* get(const std::string& id) const {
         auto it = textures.find(id);
-        if (it != textures.end()) {
-            return it->second;
-        }
-        else {
-             std::cerr << "[TextureManager] Error: Texture not found: " << id << std::endl;
-            return nullptr;
-        }
+        return it != textures.end() ? it->second.get() : nullptr;
     }
-
-private:
-    TextureManager() = default;
-    TextureManager(const TextureManager&) = delete;
-    TextureManager& operator=(const TextureManager&) = delete;
-    TextureManager(TextureManager&&) = delete;
-    TextureManager& operator=(TextureManager&&) = delete;
-
-    std::map<std::string, sf::Texture*> textures;
 };
 
 // --- Animation State Enum ---
@@ -89,19 +52,12 @@ public:
 
     AnimationComponent() = default;
 
-    void addAnimation(AnimationState state, const std::string& textureId, int frameCount, float frameDuration, sf::Vector2i frameSize, bool loops = true)
-    {
-        const sf::Texture* texturePtr = TextureManager::instance().get(textureId);
-        if (texturePtr) {
-            animations[state] = { texturePtr, frameCount, frameDuration, frameSize, loops };
-            if (sprite.getTexture() == nullptr) { 
-                sprite.setTexture(*texturePtr);
-                sprite.setOrigin(static_cast<float>(frameSize.x) / 2.f, static_cast<float>(frameSize.y) / 2.f);
-            }
-        }
+    void addAnimation(AnimationState state, const std::string& textureId, int frames, float duration, sf::Vector2i size, bool loop) {
+        if (auto tex = TextureManager::instance().get(textureId)) {
+            animations[state] = { tex, frames, duration, size, loop };
+		}
         else {
-            std::cerr << "[AnimationComponent] Error adding animation for state "
-                << static_cast<int>(state) << ": Texture '" << textureId << "' not found." << std::endl;
+            std::cerr << "[AnimationComponent] Error: Texture " << textureId << " not found." << std::endl;
         }
     }
 
@@ -314,6 +270,10 @@ public:
 
     sf::FloatRect getGlobalBounds() const { // Used for basic collision
         return animations.getSprite().getGlobalBounds();
+    }
+
+    sf::Vector2f getPosition() const {
+        return animations.getSprite().getPosition();
     }
 
     bool isAlive() const {
@@ -580,6 +540,10 @@ public:
         handleAnimations();
         updateTimers(dt);
         animations.update(dt);
+    }
+
+    sf::Vector2f getPosition() const {
+        return animations.getSprite().getPosition();
     }
 
     void move(sf::Vector2f direction) {
@@ -931,7 +895,7 @@ private:
 // --- Game Class ---
 class BossGame {
 public:
-    // Define boss boundaries here
+    //boss movement boundaries
     const float BOSS_LEFT_BOUNDARY = 600.f;
     const float BOSS_RIGHT_BOUNDARY = 1200.f;
 
@@ -966,7 +930,7 @@ private:
     sf::Sprite background;
     Player player;
     Boss boss; 
-
+    bool showDebugBoxes = false;
     // UI Elements  + Boss Health Bar
     sf::RectangleShape playerHealthBarBackground;
     sf::RectangleShape playerHealthBarFill;
@@ -983,6 +947,10 @@ private:
     const float BOSS_HEALTH_BAR_POS_X = 1280.f - BOSS_HEALTH_BAR_WIDTH - 25.f;
     const float BOSS_HEALTH_BAR_POS_Y = 25.f;
 
+    //hitboxes
+    const sf::Vector2f PLAYER_HITBOX_SIZE = { 60.f, 100.f };
+    const sf::Vector2f BOSS_HITBOX_SIZE = { 150.f, 200.f };
+    const float BOSS_HITBOX_Y_OFFSET = 30.f;
 
     void initBackground() {
         // Load background using TextureManager
@@ -1030,6 +998,26 @@ private:
         bossHealthBarFill.setPosition(BOSS_HEALTH_BAR_POS_X, BOSS_HEALTH_BAR_POS_Y);
     }
 
+    sf::FloatRect getPlayerHitbox() const {
+        sf::Vector2f pos = player.getPosition();
+        return {
+            pos.x - PLAYER_HITBOX_SIZE.x / 2,
+            pos.y - PLAYER_HITBOX_SIZE.y / 2,
+            PLAYER_HITBOX_SIZE.x,
+            PLAYER_HITBOX_SIZE.y
+        };
+    }
+
+    sf::FloatRect getBossHitbox() const {
+        sf::Vector2f pos = boss.getPosition();
+        return {
+            pos.x - BOSS_HITBOX_SIZE.x / 2,
+            pos.y - BOSS_HITBOX_SIZE.y / 2 + BOSS_HITBOX_Y_OFFSET,
+            BOSS_HITBOX_SIZE.x,
+            BOSS_HITBOX_SIZE.y
+        };
+    }
+
     void processInput() {
         sf::Event event;
         while (window.pollEvent(event)) {
@@ -1052,6 +1040,7 @@ private:
                         // Add Boss Debug Keys
                     case sf::Keyboard::Y: boss.takeDamage(50); break;   // Boss take damage
                     case sf::Keyboard::M: boss.death(); break;           // Force boss death
+					case sf::Keyboard::F1: showDebugBoxes = !showDebugBoxes; break; //debug hitboxes
 
                     default: break; // Ignore other keys for single press actions
                     }
@@ -1088,29 +1077,17 @@ private:
 
     // Added for collision logic
     void handleCollisions() {
-        // Basic collision checks using getGlobalBounds() as in original Player structure
-
-        // --- Player Attack -> Boss ---
-        // Check only if player is attacking and boss is alive
+        // Player attack vs Boss
         if (player.isAttacking() && boss.isAlive()) {
-            // Use player's visual bounds for simplicity, as original had no specific attack box
-            if (player.getGlobalBounds().intersects(boss.getGlobalBounds())) {
-                // TODO: Add cooldown logic to prevent multi-hits per swing
-                boss.takeDamage(15); // Example damage value
-                // Need to prevent continuous damage registration here
+            if (getPlayerHitbox().intersects(getBossHitbox())) {
+                boss.takeDamage(15);
             }
         }
 
-        // --- Boss Attack -> Player ---
-        // Check only if boss attack is active and player is alive
+        // Boss attack vs Player
         if (boss.isAttackActive() && player.isAlive()) {
-            // Use boss's visual bounds for simplicity
-            if (boss.getGlobalBounds().intersects(player.getGlobalBounds())) {
-                // TODO: Implement parry success check & dash invincibility check
-                // Original player had no parry success or dash invincibility logic implemented
-                player.takeDamage(25); // Example damage value
-                // TODO: Prevent multi-hits from single boss attack
-                // Need cooldown logic on boss attack registration
+            if (getBossHitbox().intersects(getPlayerHitbox())) {
+                player.takeDamage(25);
             }
         }
     }
@@ -1168,8 +1145,22 @@ private:
         }
         player.draw(window);
         boss.draw(window); 
-  
+		// Draw debug boxes if enabled
+        if (showDebugBoxes) {
+            sf::RectangleShape playerBox(sf::Vector2f(getPlayerHitbox().width, getPlayerHitbox().height));
+            playerBox.setPosition(getPlayerHitbox().left, getPlayerHitbox().top);
+            playerBox.setFillColor(sf::Color::Transparent);
+            playerBox.setOutlineColor(sf::Color::Green);
+            playerBox.setOutlineThickness(2.f);
+            window.draw(playerBox);
 
+            sf::RectangleShape bossBox(sf::Vector2f(getBossHitbox().width, getBossHitbox().height));
+            bossBox.setPosition(getBossHitbox().left, getBossHitbox().top);
+            bossBox.setFillColor(sf::Color::Transparent);
+            bossBox.setOutlineColor(sf::Color::Red);
+            bossBox.setOutlineThickness(2.f);
+            window.draw(bossBox);
+        }
         // Draw UI elements using the default view (screen coordinates)
         window.setView(window.getDefaultView()); // Switch to default view for UI
         window.draw(playerHealthBarBackground);
