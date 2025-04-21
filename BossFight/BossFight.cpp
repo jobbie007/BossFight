@@ -34,7 +34,7 @@ public:
 // --- Animation State Enum ---
 enum class AnimationState {
     // Player States
-    Idle, Run, Jump, Attack1, Attack2, Attack3, Parry, Dash, Dead, Hurt,
+    Idle, Run, Jump, Attack1, Attack2, Attack3, Parry, Dash, Dead, Hurt,Shoot,
     // Boss States
     BossIdle, BossAttack1, BossAttack2,BossAttack3, BossUltimate, BossHurt, BossDead, BossMove,
     None
@@ -224,7 +224,7 @@ public:
     Player(int maxHealth = 100, int currentHealth = 100) :
         maxHealth(maxHealth),
         currentHealth(currentHealth),
-        rng(rd()) // Initialize member RNG
+        rng(std::random_device{}()) // Initialize member RNG
     {
         loadResources();
         initAnimations();
@@ -248,10 +248,8 @@ public:
         tm.load("player_parry", "../assets/player/Parry.png");
         tm.load("player_dead", "../assets/player/Dead.png");
         tm.load("player_hurt", "../assets/player/Hurt.png");
-
-
         tm.load("player_projectile", "../assets/player/Projectile.png");
-
+        tm.load("player_shoot", "../assets/player/Shoot.png");
     }
 
     void initAnimations() {
@@ -266,6 +264,7 @@ public:
         animations.addAnimation(AnimationState::Parry, "player_parry", 6, 0.08f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Dead, "player_dead", 7, 0.2f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Hurt, "player_hurt", 2, hurtDuration, { 160, 128 }, false);
+		animations.addAnimation(AnimationState::Shoot, "player_shoot", 13, 0.01f, { 160, 128 }, false);
         animations.play(AnimationState::Idle);
     }
 
@@ -282,6 +281,14 @@ public:
                     (animations.getSprite().getColor() == defaultColor) ? damageColor : defaultColor
                 );
             }
+
+            if (animations.getCurrentState() == AnimationState::Shoot) {
+        if (animations.getCurrentFrameIndex() >= SHOOT_FRAME_TRIGGER && 
+            !hasShotDuringAnimation) {
+            shootTriggered = true;
+            hasShotDuringAnimation = true;
+        }
+    }
 
             // Check if hurt duration is over
             if (hurtTimer <= 0.f) {
@@ -397,18 +404,18 @@ public:
     void shoot() {
         if (isHurt || !isAlive() || !canShoot || isAttacking() || animations.getCurrentState() == AnimationState::Parry || dashTimer > 0) return;
 
-        // Trigger projectile spawn (handled by BossGame)
-        // We just set the cooldown here
         canShoot = false;
         shootTimer = shootCooldown;
-        shootTriggered = true;
+		shootTriggered = true; // Trigger shooting action
+
+        animations.play(AnimationState::Shoot);
+        hasShotDuringAnimation = false;
         // std::cout << "[Player] Shoot initiated!" << std::endl;
     }
 
-    bool wantsToShoot() const {  
-       // Check conditions again just before spawning  
+    bool wantsToShoot()  {  
        if (shootTriggered) {  
-           const_cast<bool&>(shootTriggered) = false; // Reset after checking  
+           shootTriggered = false; // Reset after checking  
            return true; // Indicate that the player wants to shoot  
        }  
        return false;  
@@ -480,13 +487,13 @@ private:
     bool isGrounded = true;
     const float LEFT_BOUNDARY = 1.0f;
     float rightBoundary = 1280.0f;
-
+    //input health from constructor
     int maxHealth;
     int currentHealth;
 
-    float moveSpeed = 300.f;
-    float jumpForce = 700.f;
-    float gravity = 1800.f;
+    const float moveSpeed = 300.f;
+    const float jumpForce = 700.f;
+    const float gravity = 1800.f;
     const float groundLevel = 485.f;
 
     bool canDash = true;
@@ -501,9 +508,11 @@ private:
     float attackTimer = 0.f;
 
     bool canShoot = true;
-    float shootCooldown = 0.6f;
+    float shootCooldown = 1.f;
     float shootTimer = 0.f;
     bool shootTriggered = false;
+    bool hasShotDuringAnimation = false;
+	const int SHOOT_FRAME_TRIGGER = 9; // Frame to trigger shooting
 
     bool canParry = true;
     float parryCooldown = 0.8f;
@@ -613,7 +622,7 @@ private:
 
 
         // Allow uninterruptible, non-looping animations (Attack, Dash, Parry, Jump) to finish
-        bool isUninterruptibleAction = isAttacking() || currentState == AnimationState::Dash || currentState == AnimationState::Parry;
+        bool isUninterruptibleAction = isAttacking() || currentState == AnimationState::Dash || currentState == AnimationState::Parry || currentState== AnimationState::Shoot;
 
         if (isUninterruptibleAction) {
             if (animations.isDone()) {
