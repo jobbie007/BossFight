@@ -178,9 +178,9 @@ public:
         // Adjust frame counts, durations, sizes, loops assets
         animations.addAnimation(AnimationState::Idle, "player_idle", 8, 0.2f, { 160, 128 }, true);
         animations.addAnimation(AnimationState::Run, "player_run", 8, 0.1f, { 160, 128 }, true);
-        animations.addAnimation(AnimationState::Attack1, "player_attack1", 6, 0.06f, { 160, 128 }, false);
-        animations.addAnimation(AnimationState::Attack2, "player_attack2", 5, 0.09f, { 160, 128 }, false);
-        animations.addAnimation(AnimationState::Attack3, "player_attack3", 16, 0.026f, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Attack1, "player_attack1", 6, 0.05f, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Attack2, "player_attack2", 5, 0.06f, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Attack3, "player_attack3", 16, 0.019f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Jump, "player_jump", 11, 0.08f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Dash, "player_dash", 5, 0.036f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Parry, "player_parry", 6, 0.08f, { 160, 128 }, false);
