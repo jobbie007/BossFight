@@ -728,16 +728,10 @@ public:
     };
 
     Boss(sf::Vector2f startPos, Player* playerTarget, float bLeft, float bRight, int maxHealth = 500) :position(startPos),targetPlayer(playerTarget),
-        leftBoundary(bLeft),
-        rightBoundary(bRight),
-        maxHealth(maxHealth),
-        currentHealth(maxHealth),
-        currentState(BossState::Idle),
-        rng(rd())
+        leftBoundary(bLeft), rightBoundary(bRight), maxHealth(maxHealth), currentHealth(maxHealth), currentState(BossState::Idle), rng(rd())
     {
-        minMoveDuration = 0.4f;
-        maxMoveDuration = 2.0f;
-        moveDurationDistribution = std::uniform_real_distribution<float>(minMoveDuration, maxMoveDuration);
+		                                                           //minimum and maximum move duration
+        moveDurationDistribution = std::uniform_real_distribution<float>(0.4f, 1.f);
         loadResources();
         initAnimations();
         animations.getSprite().setPosition(position);
@@ -745,9 +739,7 @@ public:
 
         // Initialize RNG distributions
         actionChoiceDistribution = std::uniform_int_distribution<int>(0, 3);
-        //moveDirectionDistribution = std::uniform_int_distribution<int>(0, 1);
         moveDurationDistribution = std::uniform_real_distribution<float>(minMoveDuration, maxMoveDuration);
-        //attackChoiceDistribution = std::uniform_int_distribution<int>(0, 1);
 
         groundAttackIntervalDistribution = std::uniform_real_distribution<float>(groundAttackIntervalMin, groundAttackIntervalMax);
         groundAttackTimer = groundAttackIntervalDistribution(rng);
@@ -1488,7 +1480,9 @@ private:
             sf::Vector2f startPos = boss.getPosition();
             startPos.y += 130; // Adjust Y position for ground level
             sf::Vector2f velocity = { -400.f, 0.f }; // Always shoots left
-            spawnBossProjectile("boss_projectile_ground", startPos, velocity, 15);
+
+                                                                  //boss damage
+            spawnBossProjectile("boss_projectile_ground", startPos, velocity, 10);
             boss.resetGroundProjectileRequest();
         }
 
@@ -1499,7 +1493,7 @@ private:
             float speed = 500.f;
             // Assume boss faces left always for simplicity, adjust if boss faces player
             sf::Vector2f velocity = { -speed, 0.f };
-            spawnBossProjectile("boss_projectile_mid", startPos, velocity, 18);
+            spawnBossProjectile("boss_projectile_mid", startPos, velocity, 10);
             boss.resetMidProjectileRequest();
         }
 
