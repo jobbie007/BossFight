@@ -142,347 +142,6 @@ private:
     bool _isDone = false; // Internal flag for non-looping animations
 };
 
-
-// Forward declaration needed for Boss constructor
-class Player;
-
-// --- Boss Class ---
-class Boss {
-public:
-    enum class BossState {
-        Idle, Attacking, Ultimate, Moving, Dead
-    };
-
-    Boss(sf::Vector2f startPos, Player* playerTarget, float bLeft, float bRight, int maxHealth = 500) :
-        position(startPos),
-        targetPlayer(playerTarget),
-        leftBoundary(bLeft),
-        rightBoundary(bRight),
-        maxHealth(maxHealth),
-        currentHealth(maxHealth),
-        currentState(BossState::Idle),
-        rng(rd())
-    {
-        minMoveDuration = 0.4f;
-        maxMoveDuration = 2.0f;
-        moveDurationDistribution = std::uniform_real_distribution<float>(minMoveDuration, maxMoveDuration);
-        loadResources();
-        initAnimations();
-        animations.getSprite().setPosition(position);
-        animations.getSprite().setScale(-1.f, 1.f);
-
-        // Initialize RNG distributions
-        actionChoiceDistribution = std::uniform_int_distribution<int>(0, 2);
-        moveDirectionDistribution = std::uniform_int_distribution<int>(0, 1);
-        moveDurationDistribution = std::uniform_real_distribution<float>(minMoveDuration, maxMoveDuration);
-        attackChoiceDistribution = std::uniform_int_distribution<int>(0, 1);
-        startActionDelay();
-    }
-
-    void loadResources() {
-        auto& tm = TextureManager::instance();
-        if (!tm.load("boss_idle", "../assets/boss/Idle.png")) std::cout << "boss idle not found";
-        if (!tm.load("boss_attack1", "../assets/boss/Attack1.png")) std::cout << "boss attack1 not found";
-        if (!tm.load("boss_attack2", "../assets/boss/Attack2.png")) std::cout << "boss attack2 not found";
-        if (!tm.load("boss_ultimate", "../assets/boss/Ultimate.png")) std::cout << "boss ultimate not found";
-        if (!tm.load("boss_dead", "../assets/boss/Dead.png")) std::cout << "boss dead not found";
-        if (!tm.load("boss_run", "../assets/boss/Run.png")) std::cout << "boss run not found";
-    }
-
-    void initAnimations() {
-        animations.addAnimation(AnimationState::BossIdle, "boss_idle", 8, 0.15f, { 800, 800 }, true);
-        animations.addAnimation(AnimationState::BossAttack1, "boss_attack1", 8, 0.12f, { 800, 800 }, false);
-        animations.addAnimation(AnimationState::BossAttack2, "boss_attack2", 8, 0.12f, { 800, 800 }, false);
-        animations.addAnimation(AnimationState::BossUltimate, "boss_ultimate", 2, 0.5f, { 800, 800 }, false);
-        animations.addAnimation(AnimationState::BossDead, "boss_dead", 9, 0.18f, { 800, 800 }, false);
-        animations.addAnimation(AnimationState::BossMove, "boss_run", 1, 0.6f, { 800, 800 }, true);
-        animations.play(AnimationState::BossIdle);
-    }
-
-    void update(float dt) {
-        if (currentState == BossState::Dead) {
-            animations.update(dt);
-            return;
-        }
-
-        updateTimers(dt);
-        handleFlashing(dt);
-
-        timeSinceLastAction += dt;
-        if (currentState == BossState::Idle && timeSinceLastAction >= currentActionDelay) {
-            chooseNextAction();
-        }
-
-        if (currentState == BossState::Moving) {
-            handleMovement(dt);
-        }
-
-        if ((currentState == BossState::Attacking || currentState == BossState::Ultimate) && animations.isDone()) {
-            setState(BossState::Idle);
-            startActionDelay();
-            attackActive = false;
-        }
-        else if (currentState == BossState::Attacking || currentState == BossState::Ultimate) {
-            checkAttackTiming();
-        }
-
-        animations.update(dt);
-        animations.getSprite().setPosition(position);
-    }
-
-    void takeDamage(int amount) {
-        if (isInvulnerable() || currentState == BossState::Dead) return;
-
-        currentHealth -= amount;
-        currentHealth = std::max(0, currentHealth);
-        std::cout << "[Boss] Took " << amount << " damage. Health: " << currentHealth << "/" << maxHealth << std::endl;
-
-        // Start damage flash effect
-        flashTimer = flashDuration;
-        animations.getSprite().setColor(damageColor);
-
-        if (currentHealth <= 0) {
-            death();
-        }
-    }
-
-    void death() {
-        if (currentState != BossState::Dead) {
-            setState(BossState::Dead);
-            animations.play(AnimationState::BossDead);
-            currentHealth = 0;
-            animations.getSprite().setColor(defaultColor);
-            velocity = { 0.f, 0.f };
-            attackActive = false;
-        }
-    }
-
-    void draw(sf::RenderTarget& target) const {
-        target.draw(animations.getSprite());
-    }
-
-    sf::FloatRect getAttackHitbox() const {
-        sf::FloatRect normal = getGlobalBounds();
-        return sf::FloatRect(normal.left ,normal.top,normal.width,normal.height);
-    }
-
-    sf::FloatRect getGlobalBounds() const {
-        bool isAttacking = currentState == BossState::Attacking ||
-            currentState == BossState::Ultimate;
-
-        float width = isAttacking ? ATTACK_HITBOX.x : NORMAL_HITBOX.x;
-        float height = NORMAL_HITBOX.y;
-
-        // Get facing direction from sprite scale
-        float direction = animations.getSprite().getScale().x > 0 ? 1.f : -1.f;
-
-        // Calculate horizontal position based on direction and attack state
-        float xPosition = position.x;
-        if (isAttacking) {
-            // Center of attack hitbox extends in facing direction
-            xPosition += (NORMAL_HITBOX.x / 2 * direction);
-        }
-
-        return sf::FloatRect(
-            xPosition - width / 2,
-            position.y - height / 2 + HITBOX_Y_OFFSET,
-            width,
-            height
-        );
-    }
-
-    sf::Vector2f getPosition() const {
-        return animations.getSprite().getPosition();
-    }
-
-    bool isAlive() const {
-        return currentState != BossState::Dead;
-    }
-
-    bool isAttackActive() const {
-        return attackActive;
-    }
-
-    int getHealth() const { return currentHealth; }
-    int getMaxHealth() const { return maxHealth; }
-
-private:
-    AnimationComponent animations;
-    sf::Vector2f position;
-    sf::Vector2f velocity = { 0.f, 0.f };
-    Player* targetPlayer = nullptr;
-    float leftBoundary;
-    float rightBoundary;
-    int maxHealth;
-    int currentHealth;
-    BossState currentState = BossState::Idle;
-
-    // Combat parameters
-    float moveSpeed = 120.f;
-    float moveTimer = 0.f;
-    float minMoveDuration = 0.5f;
-    float maxMoveDuration = 1.5f;
-    float timeSinceLastAction = 0.f;
-    float currentActionDelay = 2.0f;
-    float attackCooldown1 = 1.5f;
-    float attackCooldown2 = 2.5f;
-    float ultimateCooldown = 15.0f;
-    float currentAttackCooldown1 = 0.f;
-    float currentAttackCooldown2 = 0.f;
-    float currentUltimateCooldown = 0.f;
-    bool attackActive = false;
-    const sf::Vector2f NORMAL_HITBOX = { 150.f, 200.f };
-    const sf::Vector2f ATTACK_HITBOX = { 220.f, 200.f }; // Wider hitbox for attacks
-    const float HITBOX_Y_OFFSET = 30.f;
-    // Flash effect
-    float flashTimer = 0.f;
-    const float flashDuration = 0.3f;
-    const float flashInterval = 0.08f;
-    float flashIntervalTimer = 0.f;
-    sf::Color defaultColor = sf::Color::White;
-    sf::Color damageColor = sf::Color(200, 80, 80, 200);
-
-    // Random number generation
-    std::random_device rd;
-    std::mt19937 rng;
-    std::uniform_int_distribution<int> actionChoiceDistribution;
-    std::uniform_int_distribution<int> moveDirectionDistribution;
-    std::uniform_real_distribution<float> moveDurationDistribution;
-    std::uniform_int_distribution<int> attackChoiceDistribution;
-
-    bool isInvulnerable() const {
-        return currentState == BossState::Attacking ||
-            currentState == BossState::Ultimate ||
-			currentState == BossState::Moving ||
-            flashTimer > 0.f;
-    }
-
-    void setState(BossState newState) {
-        if (currentState != newState) {
-            currentState = newState;
-            if (newState == BossState::Idle) {
-                velocity.x = 0;
-                animations.play(AnimationState::BossIdle);
-            }
-            else if (newState == BossState::Moving) {
-                animations.play(AnimationState::BossMove);
-            }
-        }
-    }
-
-    void startActionDelay() {
-        std::uniform_real_distribution<float> delayVar(0.8f, 1.3f);
-        currentActionDelay = 1.8f * delayVar(rng);
-        timeSinceLastAction = 0.f;
-    }
-
-    void chooseNextAction() {
-        if (currentUltimateCooldown <= 0.f && targetPlayer && isAlive()) {
-            performUltimate();
-            return;
-        }
-        int action = actionChoiceDistribution(rng);
-        if (action == 0 && currentAttackCooldown1 <= 0.f) performAttack1();
-        else if (action == 1 && currentAttackCooldown2 <= 0.f) performAttack2();
-        else if (action == 2) startMoving();
-        else startActionDelay();
-    }
-
-    void startMoving() {
-        int direction = moveDirectionDistribution(rng);
-        float targetSpeed = (direction == 0) ? -moveSpeed : moveSpeed;
-
-        if ((direction == 0 && position.x > leftBoundary + 75.f) ||
-            (direction == 1 && position.x < rightBoundary - 75.f)) {
-            setState(BossState::Moving);
-            velocity.x = targetSpeed;
-            moveTimer = moveDurationDistribution(rng);
-        }
-        else {
-            startActionDelay();
-        }
-    }
-
-    void performAttack1() {
-        setState(BossState::Attacking);
-        animations.play(AnimationState::BossAttack1);
-        currentAttackCooldown1 = attackCooldown1;
-        timeSinceLastAction = 0.f;
-        velocity.x = 0;
-    }
-
-    void performAttack2() {
-        setState(BossState::Attacking);
-        animations.play(AnimationState::BossAttack2);
-        currentAttackCooldown2 = attackCooldown2;
-        timeSinceLastAction = 0.f;
-        velocity.x = 0;
-    }
-
-    void performUltimate() {
-        setState(BossState::Ultimate);
-        animations.play(AnimationState::BossUltimate);
-        currentUltimateCooldown = ultimateCooldown;
-        timeSinceLastAction = 0.f;
-        velocity.x = 0;
-    }
-
-    void handleMovement(float dt) {
-        position += velocity * dt;
-        moveTimer -= dt;
-
-        position.x = std::clamp(position.x, leftBoundary + 75.f, rightBoundary - 75.f);
-
-        if (moveTimer <= 0.f) {
-            setState(BossState::Idle);
-            startActionDelay();
-        }
-    }
-
-    void updateTimers(float dt) {
-        if (currentAttackCooldown1 > 0.f) currentAttackCooldown1 -= dt;
-        if (currentAttackCooldown2 > 0.f) currentAttackCooldown2 -= dt;
-        if (currentUltimateCooldown > 0.f) currentUltimateCooldown -= dt;
-    }
-
-    void handleFlashing(float dt) {
-        if (flashTimer > 0.f) {
-            flashTimer -= dt;
-            flashIntervalTimer -= dt;
-
-            if (flashIntervalTimer <= 0.f) {
-                flashIntervalTimer = flashInterval;
-                animations.getSprite().setColor(
-                    (animations.getSprite().getColor() == defaultColor) ?
-                    damageColor : defaultColor
-                );
-            }
-
-            if (flashTimer <= 0.f) {
-                animations.getSprite().setColor(defaultColor);
-            }
-        }
-    }
-
-    void checkAttackTiming() {
-        AnimationState animState = animations.getCurrentState();
-        int currentFrame = animations.getCurrentFrameIndex();
-
-        attackActive = false;
-
-        if (animState == AnimationState::BossAttack1 && currentFrame >= 3 && currentFrame <= 6) {
-            attackActive = true;
-        }
-        else if (animState == AnimationState::BossAttack2 && currentFrame >= 4 && currentFrame <= 8) {
-            attackActive = true;
-        }
-        else if (animState == AnimationState::BossUltimate && currentFrame >= 6 && currentFrame <= 12) {
-            attackActive = true;
-        }
-    }
-};
-
-
 // --- Player Class ---
 class Player {
 public:
@@ -937,6 +596,341 @@ private:
     }
 };
 
+// --- Boss Class ---
+class Boss {
+public:
+    enum class BossState {
+        Idle, Attacking, Ultimate, Moving, Dead
+    };
+
+    Boss(sf::Vector2f startPos, Player* playerTarget, float bLeft, float bRight, int maxHealth = 500) :
+        position(startPos),
+        targetPlayer(playerTarget),
+        leftBoundary(bLeft),
+        rightBoundary(bRight),
+        maxHealth(maxHealth),
+        currentHealth(maxHealth),
+        currentState(BossState::Idle),
+        rng(rd())
+    {
+        minMoveDuration = 0.4f;
+        maxMoveDuration = 2.0f;
+        moveDurationDistribution = std::uniform_real_distribution<float>(minMoveDuration, maxMoveDuration);
+        loadResources();
+        initAnimations();
+        animations.getSprite().setPosition(position);
+        animations.getSprite().setScale(-1.f, 1.f);
+
+        // Initialize RNG distributions
+        actionChoiceDistribution = std::uniform_int_distribution<int>(0, 2);
+        moveDirectionDistribution = std::uniform_int_distribution<int>(0, 1);
+        moveDurationDistribution = std::uniform_real_distribution<float>(minMoveDuration, maxMoveDuration);
+        attackChoiceDistribution = std::uniform_int_distribution<int>(0, 1);
+        startActionDelay();
+    }
+
+    void loadResources() {
+        auto& tm = TextureManager::instance();
+        if (!tm.load("boss_idle", "../assets/boss/Idle.png")) std::cout << "boss idle not found";
+        if (!tm.load("boss_attack1", "../assets/boss/Attack1.png")) std::cout << "boss attack1 not found";
+        if (!tm.load("boss_attack2", "../assets/boss/Attack2.png")) std::cout << "boss attack2 not found";
+        if (!tm.load("boss_ultimate", "../assets/boss/Ultimate.png")) std::cout << "boss ultimate not found";
+        if (!tm.load("boss_dead", "../assets/boss/Dead.png")) std::cout << "boss dead not found";
+        if (!tm.load("boss_run", "../assets/boss/Run.png")) std::cout << "boss run not found";
+    }
+
+    void initAnimations() {
+        animations.addAnimation(AnimationState::BossIdle, "boss_idle", 8, 0.15f, { 800, 800 }, true);
+        animations.addAnimation(AnimationState::BossAttack1, "boss_attack1", 8, 0.12f, { 800, 800 }, false);
+        animations.addAnimation(AnimationState::BossAttack2, "boss_attack2", 8, 0.12f, { 800, 800 }, false);
+        animations.addAnimation(AnimationState::BossUltimate, "boss_ultimate", 2, 0.5f, { 800, 800 }, false);
+        animations.addAnimation(AnimationState::BossDead, "boss_dead", 9, 0.18f, { 800, 800 }, false);
+        animations.addAnimation(AnimationState::BossMove, "boss_run", 1, 0.6f, { 800, 800 }, true);
+        animations.play(AnimationState::BossIdle);
+    }
+
+    void update(float dt) {
+        if (currentState == BossState::Dead) {
+            animations.update(dt);
+            return;
+        }
+
+        updateTimers(dt);
+        handleFlashing(dt);
+
+        timeSinceLastAction += dt;
+        if (currentState == BossState::Idle && timeSinceLastAction >= currentActionDelay) {
+            chooseNextAction();
+        }
+
+        if (currentState == BossState::Moving) {
+            handleMovement(dt);
+        }
+
+        if ((currentState == BossState::Attacking || currentState == BossState::Ultimate) && animations.isDone()) {
+            setState(BossState::Idle);
+            startActionDelay();
+            attackActive = false;
+        }
+        else if (currentState == BossState::Attacking || currentState == BossState::Ultimate) {
+            checkAttackTiming();
+        }
+
+        animations.update(dt);
+        animations.getSprite().setPosition(position);
+    }
+
+    void takeDamage(int amount) {
+        if (isInvulnerable() || currentState == BossState::Dead) return;
+
+        currentHealth -= amount;
+        currentHealth = std::max(0, currentHealth);
+        std::cout << "[Boss] Took " << amount << " damage. Health: " << currentHealth << "/" << maxHealth << std::endl;
+
+        // Start damage flash effect
+        flashTimer = flashDuration;
+        animations.getSprite().setColor(damageColor);
+
+        if (currentHealth <= 0) {
+            death();
+        }
+    }
+
+    void death() {
+        if (currentState != BossState::Dead) {
+            setState(BossState::Dead);
+            animations.play(AnimationState::BossDead);
+            currentHealth = 0;
+            animations.getSprite().setColor(defaultColor);
+            velocity = { 0.f, 0.f };
+            attackActive = false;
+        }
+    }
+
+    void draw(sf::RenderTarget& target) const {
+        target.draw(animations.getSprite());
+    }
+
+    sf::FloatRect getAttackHitbox() const {
+        sf::FloatRect normal = getGlobalBounds();
+        return sf::FloatRect(normal.left ,normal.top,normal.width,normal.height);
+    }
+
+    sf::FloatRect getGlobalBounds() const {
+        bool isAttacking = currentState == BossState::Attacking ||
+            currentState == BossState::Ultimate;
+
+        float width = isAttacking ? ATTACK_HITBOX.x : NORMAL_HITBOX.x;
+        float height = NORMAL_HITBOX.y;
+
+        // Get facing direction from sprite scale
+        float direction = animations.getSprite().getScale().x > 0 ? 1.f : -1.f;
+
+        // Calculate horizontal position based on direction and attack state
+        float xPosition = position.x;
+        if (isAttacking) {
+            // Center of attack hitbox extends in facing direction
+            xPosition += (NORMAL_HITBOX.x / 2 * direction);
+        }
+
+        return sf::FloatRect(
+            xPosition - width / 2,
+            position.y - height / 2 + HITBOX_Y_OFFSET,
+            width,
+            height
+        );
+    }
+
+    sf::Vector2f getPosition() const {
+        return animations.getSprite().getPosition();
+    }
+
+    bool isAlive() const {
+        return currentState != BossState::Dead;
+    }
+
+    bool isAttackActive() const {
+        return attackActive;
+    }
+
+    int getHealth() const { return currentHealth; }
+    int getMaxHealth() const { return maxHealth; }
+
+private:
+    AnimationComponent animations;
+    sf::Vector2f position;
+    sf::Vector2f velocity = { 0.f, 0.f };
+    Player* targetPlayer = nullptr;
+    float leftBoundary;
+    float rightBoundary;
+    int maxHealth;
+    int currentHealth;
+    BossState currentState = BossState::Idle;
+
+    // Combat parameters
+    float moveSpeed = 120.f;
+    float moveTimer = 0.f;
+    float minMoveDuration = 0.5f;
+    float maxMoveDuration = 1.5f;
+    float timeSinceLastAction = 0.f;
+    float currentActionDelay = 2.0f;
+    float attackCooldown1 = 1.5f;
+    float attackCooldown2 = 2.5f;
+    float ultimateCooldown = 15.0f;
+    float currentAttackCooldown1 = 0.f;
+    float currentAttackCooldown2 = 0.f;
+    float currentUltimateCooldown = 0.f;
+    bool attackActive = false;
+    const sf::Vector2f NORMAL_HITBOX = { 150.f, 200.f };
+    const sf::Vector2f ATTACK_HITBOX = { 220.f, 200.f }; // Wider hitbox for attacks
+    const float HITBOX_Y_OFFSET = 30.f;
+    // Flash effect
+    float flashTimer = 0.f;
+    const float flashDuration = 0.3f;
+    const float flashInterval = 0.08f;
+    float flashIntervalTimer = 0.f;
+    sf::Color defaultColor = sf::Color::White;
+    sf::Color damageColor = sf::Color(200, 80, 80, 200);
+
+    // Random number generation
+    std::random_device rd;
+    std::mt19937 rng;
+    std::uniform_int_distribution<int> actionChoiceDistribution;
+    std::uniform_int_distribution<int> moveDirectionDistribution;
+    std::uniform_real_distribution<float> moveDurationDistribution;
+    std::uniform_int_distribution<int> attackChoiceDistribution;
+
+    bool isInvulnerable() const {
+        return currentState == BossState::Attacking ||
+            currentState == BossState::Ultimate ||
+			currentState == BossState::Moving ||
+            flashTimer > 0.f;
+    }
+
+    void setState(BossState newState) {
+        if (currentState != newState) {
+            currentState = newState;
+            if (newState == BossState::Idle) {
+                velocity.x = 0;
+                animations.play(AnimationState::BossIdle);
+            }
+            else if (newState == BossState::Moving) {
+                animations.play(AnimationState::BossMove);
+            }
+        }
+    }
+
+    void startActionDelay() {
+        std::uniform_real_distribution<float> delayVar(0.8f, 1.3f);
+        currentActionDelay = 1.8f * delayVar(rng);
+        timeSinceLastAction = 0.f;
+    }
+
+    void chooseNextAction() {
+        if (currentUltimateCooldown <= 0.f && targetPlayer && isAlive()) {
+            performUltimate();
+            return;
+        }
+        int action = actionChoiceDistribution(rng);
+        if (action == 0 && currentAttackCooldown1 <= 0.f) performAttack1();
+        else if (action == 1 && currentAttackCooldown2 <= 0.f) performAttack2();
+        else if (action == 2) startMoving();
+        else startActionDelay();
+    }
+
+    void startMoving() {
+        int direction = moveDirectionDistribution(rng);
+        float targetSpeed = (direction == 0) ? -moveSpeed : moveSpeed;
+
+        if ((direction == 0 && position.x > leftBoundary + 75.f) ||
+            (direction == 1 && position.x < rightBoundary - 75.f)) {
+            setState(BossState::Moving);
+            velocity.x = targetSpeed;
+            moveTimer = moveDurationDistribution(rng);
+        }
+        else {
+            startActionDelay();
+        }
+    }
+
+    void performAttack1() {
+        setState(BossState::Attacking);
+        animations.play(AnimationState::BossAttack1);
+        currentAttackCooldown1 = attackCooldown1;
+        timeSinceLastAction = 0.f;
+        velocity.x = 0;
+    }
+
+    void performAttack2() {
+        setState(BossState::Attacking);
+        animations.play(AnimationState::BossAttack2);
+        currentAttackCooldown2 = attackCooldown2;
+        timeSinceLastAction = 0.f;
+        velocity.x = 0;
+    }
+
+    void performUltimate() {
+        setState(BossState::Ultimate);
+        animations.play(AnimationState::BossUltimate);
+        currentUltimateCooldown = ultimateCooldown;
+        timeSinceLastAction = 0.f;
+        velocity.x = 0;
+    }
+
+    void handleMovement(float dt) {
+        position += velocity * dt;
+        moveTimer -= dt;
+
+        position.x = std::clamp(position.x, leftBoundary + 75.f, rightBoundary - 75.f);
+
+        if (moveTimer <= 0.f) {
+            setState(BossState::Idle);
+            startActionDelay();
+        }
+    }
+
+    void updateTimers(float dt) {
+        if (currentAttackCooldown1 > 0.f) currentAttackCooldown1 -= dt;
+        if (currentAttackCooldown2 > 0.f) currentAttackCooldown2 -= dt;
+        if (currentUltimateCooldown > 0.f) currentUltimateCooldown -= dt;
+    }
+
+    void handleFlashing(float dt) {
+        if (flashTimer > 0.f) {
+            flashTimer -= dt;
+            flashIntervalTimer -= dt;
+
+            if (flashIntervalTimer <= 0.f) {
+                flashIntervalTimer = flashInterval;
+                animations.getSprite().setColor(
+                    (animations.getSprite().getColor() == defaultColor) ?
+                    damageColor : defaultColor
+                );
+            }
+
+            if (flashTimer <= 0.f) {
+                animations.getSprite().setColor(defaultColor);
+            }
+        }
+    }
+
+    void checkAttackTiming() {
+        AnimationState animState = animations.getCurrentState();
+        int currentFrame = animations.getCurrentFrameIndex();
+
+        attackActive = false;
+
+        if (animState == AnimationState::BossAttack1 && currentFrame >= 3 && currentFrame <= 6) {
+            attackActive = true;
+        }
+        else if (animState == AnimationState::BossAttack2 && currentFrame >= 4 && currentFrame <= 8) {
+            attackActive = true;
+        }
+        else if (animState == AnimationState::BossUltimate && currentFrame >= 6 && currentFrame <= 12) {
+            attackActive = true;
+        }
+    }
+};
 
 // --- Game Class ---
 class BossGame {
