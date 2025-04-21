@@ -1215,6 +1215,10 @@ private:
     const sf::Vector2f BOSS_HITBOX_SIZE = { 150.f, 200.f };
     const float BOSS_HITBOX_Y_OFFSET = 30.f;
 
+    sf::Font font;
+    sf::Text playerHealthText;
+    sf::Text bossHealthText;
+
     void initBackground() {
         // Load background using TextureManager
         if (!TextureManager::instance().load("background", "../assets/background.png")) {
@@ -1239,6 +1243,23 @@ private:
     }
 
     void setupUI() {
+
+        if (!font.loadFromFile("../assets/arial.ttf")) {
+            std::cerr << "Failed to load font!" << std::endl;
+        }
+
+        // Player health text
+        playerHealthText.setFont(font);
+        playerHealthText.setCharacterSize(20);
+        playerHealthText.setFillColor(sf::Color::White);
+        playerHealthText.setPosition(HEALTH_BAR_POS_X + HEALTH_BAR_WIDTH + 10, HEALTH_BAR_POS_Y);
+
+        // Boss health text
+        bossHealthText.setFont(font);
+        bossHealthText.setCharacterSize(20);
+        bossHealthText.setFillColor(sf::Color::White);
+        bossHealthText.setPosition(BOSS_HEALTH_BAR_POS_X - 150, BOSS_HEALTH_BAR_POS_Y);
+    
         playerHealthBarBackground.setSize(sf::Vector2f(HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT));
         playerHealthBarBackground.setFillColor(sf::Color(50, 50, 50, 200)); // Dark grey background
         playerHealthBarBackground.setOutlineColor(sf::Color::Black);
@@ -1348,7 +1369,7 @@ private:
             sf::FloatRect playerAttackBounds = player.getGlobalBounds();
 
             if (playerAttackBounds.intersects(boss.getGlobalBounds())) {           
-                boss.takeDamage(15);
+                boss.takeDamage(20);
             }
         }
 
@@ -1419,6 +1440,23 @@ private:
             playerHealthBarFill.setFillColor(sf::Color(0, 200, 0, 220)); // Green when high
         }
 
+        // Update player health text
+        playerHealthText.setString(std::to_string(player.getHealth()));
+        // Center in player health bar
+        sf::FloatRect textBounds = playerHealthText.getLocalBounds();
+        playerHealthText.setPosition(
+            HEALTH_BAR_POS_X + (HEALTH_BAR_WIDTH - textBounds.width) / 2,
+            HEALTH_BAR_POS_Y + (HEALTH_BAR_HEIGHT - 19) / 2
+        );
+
+        // Update boss health text
+        bossHealthText.setString(std::to_string(boss.getHealth()));
+        // Center in boss health bar
+        textBounds = bossHealthText.getLocalBounds();
+        bossHealthText.setPosition(
+            BOSS_HEALTH_BAR_POS_X + (BOSS_HEALTH_BAR_WIDTH - textBounds.width) / 2,
+            BOSS_HEALTH_BAR_POS_Y + (BOSS_HEALTH_BAR_HEIGHT - 15) / 2
+        );
         //boss health bar update
         float bossHealthPercent = 0.f;
         if (boss.getMaxHealth() > 0) {
@@ -1427,6 +1465,7 @@ private:
         bossHealthPercent = std::max(0.f, bossHealthPercent);
         bossHealthBarFill.setSize(sf::Vector2f(BOSS_HEALTH_BAR_WIDTH * bossHealthPercent, BOSS_HEALTH_BAR_HEIGHT));
         bossHealthBarFill.setFillColor(sf::Color(200, 0, 0, 220));
+    
     }
 
     void spawnPlayerProjectile() {
@@ -1595,8 +1634,10 @@ private:
         window.draw(playerHealthBarFill);
         window.draw(bossHealthBarBackground);
         window.draw(bossHealthBarFill);
-        // Draw other UI elements (score, timer, etc.) here
 
+        // Draw health text
+        window.draw(playerHealthText);
+        window.draw(bossHealthText);
         window.display();
     }
 };
