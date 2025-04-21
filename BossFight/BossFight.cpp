@@ -1446,7 +1446,7 @@ private:
         sf::FloatRect textBounds = playerHealthText.getLocalBounds();
         playerHealthText.setPosition(
             HEALTH_BAR_POS_X + (HEALTH_BAR_WIDTH - textBounds.width) / 2,
-            HEALTH_BAR_POS_Y + (HEALTH_BAR_HEIGHT - 19) / 2
+            HEALTH_BAR_POS_Y + (HEALTH_BAR_HEIGHT -25 ) / 2
         );
 
         // Update boss health text
@@ -1455,7 +1455,7 @@ private:
         textBounds = bossHealthText.getLocalBounds();
         bossHealthText.setPosition(
             BOSS_HEALTH_BAR_POS_X + (BOSS_HEALTH_BAR_WIDTH - textBounds.width) / 2,
-            BOSS_HEALTH_BAR_POS_Y + (BOSS_HEALTH_BAR_HEIGHT - 15) / 2
+            BOSS_HEALTH_BAR_POS_Y + (BOSS_HEALTH_BAR_HEIGHT -25 ) / 2
         );
         //boss health bar update
         float bossHealthPercent = 0.f;
