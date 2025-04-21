@@ -315,7 +315,7 @@ public:
     }
 
     void takeDamage(int amount) {
-        // Prevent taking damage if already dead, or already in the hurt state (prevents chain-stuns)
+        // Prevent taking damage if already dead, or already in the hurt state
         if (!isAlive() || animations.getCurrentState() == AnimationState::Dead || isHurt) {
             return;
         }
