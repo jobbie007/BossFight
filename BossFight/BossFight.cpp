@@ -744,8 +744,8 @@ public:
         animations.getSprite().setScale(-1.f, 1.f);
 
         // Initialize RNG distributions
-        actionChoiceDistribution = std::uniform_int_distribution<int>(0, 2);
-        moveDirectionDistribution = std::uniform_int_distribution<int>(0, 1);
+        actionChoiceDistribution = std::uniform_int_distribution<int>(0, 3);
+        //moveDirectionDistribution = std::uniform_int_distribution<int>(0, 1);
         moveDurationDistribution = std::uniform_real_distribution<float>(minMoveDuration, maxMoveDuration);
         //attackChoiceDistribution = std::uniform_int_distribution<int>(0, 1);
 
@@ -1203,7 +1203,6 @@ private:
     std::random_device rd; // Obtain a random seed
     std::mt19937 gameRng;
     bool showDebugBoxes = false;
-    // UI Elements  + Boss Health Bar
     sf::RectangleShape playerHealthBarBackground;
     sf::RectangleShape playerHealthBarFill;
     const float HEALTH_BAR_WIDTH = 300.f;
@@ -1583,7 +1582,17 @@ private:
             attackRect.setOutlineThickness(2.f);
             window.draw(attackRect);
 
-
+            for (const auto& proj : projectiles) {
+                if (proj.isActive()) {
+                    sf::FloatRect bounds = proj.getGlobalBounds();
+                    sf::RectangleShape projBox(sf::Vector2f(bounds.width, bounds.height));
+                    projBox.setPosition(bounds.left, bounds.top);
+                    projBox.setFillColor(sf::Color::Transparent);
+                    projBox.setOutlineColor(proj.getOwner() == Projectile::Owner::PLAYER ? sf::Color::Cyan : sf::Color::Yellow);
+                    projBox.setOutlineThickness(1.f);
+                    window.draw(projBox);
+                }
+            }
         }
 
         // Draw UI elements using the default view (screen coordinates)
