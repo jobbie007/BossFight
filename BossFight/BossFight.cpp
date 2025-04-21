@@ -264,7 +264,7 @@ public:
         animations.addAnimation(AnimationState::Parry, "player_parry", 6, 0.08f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Dead, "player_dead", 7, 0.2f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Hurt, "player_hurt", 2, hurtDuration, { 160, 128 }, false);
-		animations.addAnimation(AnimationState::Shoot, "player_shoot", 13, 0.01f, { 160, 128 }, false);
+		animations.addAnimation(AnimationState::Shoot, "player_shoot", 13, 0.05f, { 160, 128 }, false);
         animations.play(AnimationState::Idle);
     }
 
@@ -282,13 +282,8 @@ public:
                 );
             }
 
-            if (animations.getCurrentState() == AnimationState::Shoot) {
-        if (animations.getCurrentFrameIndex() >= SHOOT_FRAME_TRIGGER && 
-            !hasShotDuringAnimation) {
-            shootTriggered = true;
-            hasShotDuringAnimation = true;
-        }
-    }
+			
+       
 
             // Check if hurt duration is over
             if (hurtTimer <= 0.f) {
@@ -311,6 +306,14 @@ public:
         handleAnimations();
         updateTimers(dt);
         animations.update(dt);
+
+        if (animations.getCurrentState() == AnimationState::Shoot) {
+            if (animations.getCurrentFrameIndex() >= SHOOT_FRAME_TRIGGER &&
+                !hasShotDuringAnimation) {
+                shootTriggered = true;
+                hasShotDuringAnimation = true;
+            }
+        }
     }
 
     sf::Vector2f getPosition() const {
@@ -406,8 +409,6 @@ public:
 
         canShoot = false;
         shootTimer = shootCooldown;
-		shootTriggered = true; // Trigger shooting action
-
         animations.play(AnimationState::Shoot);
         hasShotDuringAnimation = false;
         // std::cout << "[Player] Shoot initiated!" << std::endl;
@@ -512,7 +513,7 @@ private:
     float shootTimer = 0.f;
     bool shootTriggered = false;
     bool hasShotDuringAnimation = false;
-	const int SHOOT_FRAME_TRIGGER = 9; // Frame to trigger shooting
+	const int SHOOT_FRAME_TRIGGER = 10; // Frame to trigger shooting
 
     bool canParry = true;
     float parryCooldown = 0.8f;
