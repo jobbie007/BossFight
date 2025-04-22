@@ -36,7 +36,7 @@ enum class AnimationState {
     // Player States
     Idle, Run, Jump, Attack1, Attack2, Attack3, Parry, Dash, Dead, Hurt, Shoot,
     // Boss States
-    BossIdle, BossAttack1, BossAttack2, BossAttack3, BossUltimate, BossHurt, BossDead, BossMove,
+    BossIdle, BossAttack1, BossAttack2, BossAttack3, BossUltimate, BossHurt, BossDead,
     None
 };
 
@@ -724,7 +724,7 @@ private:
 class Boss {
 public:
     enum class BossState {
-        Idle, Attacking1, Attacking2, Attacking3, Ultimate, Moving, Dead
+        Idle, Attacking1, Attacking2, Attacking3, Ultimate, Dead
     };
 
     Boss(sf::Vector2f startPos, Player* playerTarget, float bLeft, float bRight, int maxHealth = 500) :position(startPos), targetPlayer(playerTarget),
@@ -738,9 +738,7 @@ public:
         animations.getSprite().setScale(-1.f, 1.f);
 
         // Initialize RNG distributions
-        actionChoiceDistribution = std::uniform_int_distribution<int>(0, 3);
-        moveDurationDistribution = std::uniform_real_distribution<float>(minMoveDuration, maxMoveDuration);
-
+        actionChoiceDistribution = std::uniform_int_distribution<int>(0, 2);
         groundAttackIntervalDistribution = std::uniform_real_distribution<float>(groundAttackIntervalMin, groundAttackIntervalMax);
         groundAttackTimer = groundAttackIntervalDistribution(rng);
 
@@ -755,7 +753,6 @@ public:
         if (!tm.load("boss_attack3", "../assets/boss/Attack3.png")) std::cout << "boss attack3 not found";
         if (!tm.load("boss_ultimate", "../assets/boss/Ultimate.png")) std::cout << "boss ultimate not found";
         if (!tm.load("boss_dead", "../assets/boss/Dead.png")) std::cout << "boss dead not found";
-        if (!tm.load("boss_run", "../assets/boss/Run.png")) std::cout << "boss run not found";
         if (!tm.load("boss_projectile_ground", "../assets/boss/Projectile_Ground.png")) std::cerr << "Failed to load boss_projectile_ground\n";
         if (!tm.load("boss_projectile_mid", "../assets/boss/Projectile_Mid.png")) std::cerr << "Failed to load boss_projectile_mid\n";
         if (!tm.load("boss_projectile_rain", "../assets/boss/Projectile_Rain.png")) std::cerr << "Failed to load boss_projectile_rain\n";
@@ -768,7 +765,6 @@ public:
         animations.addAnimation(AnimationState::BossAttack3, "boss_attack3", 2, 0.4f, { 800, 800 }, false);
         animations.addAnimation(AnimationState::BossUltimate, "boss_ultimate", 2, 0.3f, { 800, 800 }, false);
         animations.addAnimation(AnimationState::BossDead, "boss_dead", 9, 0.18f, { 800, 800 }, false);
-        animations.addAnimation(AnimationState::BossMove, "boss_run", 8, 0.1f, { 800, 800 }, true); // Use Run animation for Move state
         animations.play(AnimationState::BossIdle);
     }
 
@@ -781,7 +777,7 @@ public:
         updateTimers(dt);
         handleFlashing(dt);
 
-        if (currentState == BossState::Idle || currentState == BossState::Moving) { // Only fire ground attack when not busy with other attacks
+        if (currentState == BossState::Idle) { // Only fire ground attack when not busy with other attacks
             groundAttackTimer -= dt;
             if (groundAttackTimer <= 0.f) {
                 triggerGroundProjectile = true; // Signal BossGame to spawn
@@ -792,10 +788,6 @@ public:
         timeSinceLastAction += dt;
         if (currentState == BossState::Idle && timeSinceLastAction >= currentActionDelay) {
             chooseNextAction();
-        }
-
-        if (currentState == BossState::Moving) {
-            handleMovement(dt);
         }
 
         bool isAttackingState = (currentState == BossState::Attacking1 ||
@@ -927,10 +919,6 @@ private:
     BossState currentState = BossState::Idle;
 
     // Combat parameters
-    float moveSpeed = 120.f;
-    float moveTimer = 0.f;
-    float minMoveDuration = 0.5f;
-    float maxMoveDuration = 1.5f;
     float timeSinceLastAction = 0.f;
     float currentActionDelay = 2.0f;
     float attackCooldown1 = 1.5f;
@@ -978,7 +966,6 @@ private:
             currentState == BossState::Attacking2 ||
             currentState == BossState::Attacking3 ||
             currentState == BossState::Ultimate ||
-            currentState == BossState::Moving ||
             flashTimer > 0.f;
     }
 
@@ -991,9 +978,6 @@ private:
             case BossState::Idle:
                 velocity.x = 0;
                 animations.play(AnimationState::BossIdle);
-                break;
-            case BossState::Moving:
-                animations.play(AnimationState::BossMove);
                 break;
             case BossState::Attacking1:
                 velocity.x = 0;
@@ -1037,26 +1021,10 @@ private:
         // Try the chosen action if cooldown allows, otherwise default to delaying again
         if (action == 0 && currentAttackCooldown1 <= 0.f) performAttack1();
         else if (action == 1 && currentAttackCooldown2 <= 0.f) performAttack2();
-        else if (action == 2 && currentAttackCooldown3 <= 0.f) performAttack3(); // NEW
-        else if (action == 3) startMoving();
+        else if (action == 2 && currentAttackCooldown3 <= 0.f) performAttack3(); 
         else {
             // If chosen action is on cooldown, or invalid, just wait again
             setState(BossState::Idle); // Ensure idle state
-            startActionDelay();
-        }
-    }
-
-    void startMoving() {
-        int direction = moveDirectionDistribution(rng);
-        float targetSpeed = (direction == 0) ? -moveSpeed : moveSpeed;
-
-        if ((direction == 0 && position.x > leftBoundary + 75.f) ||
-            (direction == 1 && position.x < rightBoundary - 75.f)) {
-            setState(BossState::Moving);
-            velocity.x = targetSpeed;
-            moveTimer = moveDurationDistribution(rng);
-        }
-        else {
             startActionDelay();
         }
     }
@@ -1083,18 +1051,6 @@ private:
         setState(BossState::Ultimate);
         currentUltimateCooldown = ultimateCooldown;
         timeSinceLastAction = 0.f;
-    }
-
-    void handleMovement(float dt) {
-        position += velocity * dt;
-        moveTimer -= dt;
-
-        position.x = std::clamp(position.x, leftBoundary + 75.f, rightBoundary - 75.f);
-
-        if (moveTimer <= 0.f) {
-            setState(BossState::Idle);
-            startActionDelay();
-        }
     }
 
     void updateTimers(float dt) {
