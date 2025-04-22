@@ -1210,7 +1210,7 @@ private:
     const float BOSS_HEALTH_BAR_POS_Y = 25.f;
 
     //hitboxes
-    const sf::Vector2f PLAYER_HITBOX_SIZE = { 60.f, 100.f };
+    const sf::Vector2f PLAYER_HITBOX_SIZE = { 60.f, 80.f };
     const sf::Vector2f BOSS_HITBOX_SIZE = { 150.f, 200.f };
     const float BOSS_HITBOX_Y_OFFSET = 30.f;
 
@@ -1354,10 +1354,10 @@ private:
                     case sf::Keyboard::RShift:player.dash(); break;
                     case sf::Keyboard::Q:     player.parry(); break;
                     case sf::Keyboard::F:     player.shoot(); break;
-                        // Debug keys from original
+                        // Debug keys 
                     case sf::Keyboard::T: player.takeDamage(10); break;
                     case sf::Keyboard::N: player.death(); break;
-                        // Add Boss Debug Keys
+                        // Boss Debug Keys
                     case sf::Keyboard::Y: boss.takeDamage(100); break;   // Boss take damage
                     case sf::Keyboard::M: boss.death(); break;           // Force boss death
                     case sf::Keyboard::F1: showDebugBoxes = !showDebugBoxes; break; //debug hitboxes
@@ -1589,8 +1589,8 @@ private:
         // Boss Rain Projectile (Ultimate)
         if (boss.wantsToShootRain()) {
             // Spawn at random X position above the screen
-            std::uniform_real_distribution<float> rainXDist(0.f, (float)window.getSize().x);
-            sf::Vector2f startPos = { rainXDist(gameRng), -50.f }; // Start above screen
+            std::uniform_real_distribution<float> rainXDist(0.f, (float)window.getSize().x-200);
+            sf::Vector2f startPos = { rainXDist(gameRng), -100.f }; // Start above screen
             sf::Vector2f velocity = { 0.f, 600.f }; // Straight down
             spawnBossProjectile("boss_projectile_rain", startPos, velocity, 12);
             boss.resetRainProjectileRequest();
