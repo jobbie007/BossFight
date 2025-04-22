@@ -1256,11 +1256,10 @@ private:
         }
 
         std::vector<std::pair<std::string, float>> messageConfig = {
-        {"Move with A/D", 5.0f},
-        {"Jump with SPACE", 5.0f},
+        {"Move with A/D Space", 5.0f},
         {"Attack with E,F,left click", 5.0f},
         {"Dash with SHIFT", 5.0f},
-        {"Parry with Q, right click", 5.0f}
+        {"Parry with Q or right click", 5.0f}
         };
         float verticalPosition = 150.f;
         for (auto& [msg, duration] : messageConfig) {
