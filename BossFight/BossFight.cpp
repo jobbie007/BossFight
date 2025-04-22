@@ -1163,7 +1163,7 @@ public:
         window(sf::VideoMode(1280, 720), "Final Boss"),
         player(), // Default player constructor
         // Initialize Boss position, passing target, boundaries, health
-        boss({ 1000.f, 385.f }, & player, 600.f, 1250.f, 600), gameRng(rd())
+        boss({ 1100.f, 385.f }, & player, 600.f, 1250.f, 600), gameRng(rd())
     {   
         window.setFramerateLimit(60);
         window.setVerticalSyncEnabled(true);
