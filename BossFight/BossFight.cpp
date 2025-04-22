@@ -1214,6 +1214,14 @@ private:
     const sf::Vector2f BOSS_HITBOX_SIZE = { 150.f, 200.f };
     const float BOSS_HITBOX_Y_OFFSET = 30.f;
 
+    struct TutorialMessage {
+        sf::Text text;
+        float duration;
+        float timer;
+        bool active;
+    };
+
+    std::vector<TutorialMessage> tutorialMessages;
     sf::Font font;
     sf::Text playerHealthText;
     sf::Text bossHealthText;
@@ -1247,6 +1255,35 @@ private:
             std::cerr << "Failed to load font!" << std::endl;
         }
 
+        std::vector<std::pair<std::string, float>> messageConfig = {
+        {"Move with A/D", 5.0f},
+        {"Jump with SPACE", 5.0f},
+        {"Attack with E,F,left click", 5.0f},
+        {"Dash with SHIFT", 5.0f},
+        {"Parry with Q, right click", 5.0f}
+        };
+        float verticalPosition = 150.f;
+        for (auto& [msg, duration] : messageConfig) {
+            TutorialMessage tutorial;
+            tutorial.text.setFont(font);
+            tutorial.text.setString(msg);
+            tutorial.text.setCharacterSize(30);
+            tutorial.text.setFillColor(sf::Color::White);
+            tutorial.text.setOutlineColor(sf::Color::Black);
+            tutorial.text.setOutlineThickness(2.f);
+
+            sf::FloatRect bounds = tutorial.text.getLocalBounds();
+            tutorial.text.setOrigin(bounds.width / 2, bounds.height / 2);
+            tutorial.text.setPosition(window.getSize().x / 2, verticalPosition);
+
+            tutorial.duration = duration;
+            tutorial.timer = duration;
+            tutorial.active = true;
+
+            tutorialMessages.push_back(tutorial);
+            verticalPosition += 50.f;
+        }
+    
         // Player health text
         playerHealthText.setFont(font);
         playerHealthText.setCharacterSize(20);
@@ -1509,6 +1546,22 @@ private:
         player.update(dt);
         boss.update(dt);
 
+
+        for (auto& msg : tutorialMessages) {
+            if (msg.active) {
+                msg.timer -= dt;
+
+                // Calculate alpha based on remaining time
+                float alpha = std::clamp(msg.timer * 255.f / msg.duration, 0.f, 255.f);
+                msg.text.setFillColor(sf::Color(255, 255, 255, static_cast<sf::Uint8>(alpha)));
+                msg.text.setOutlineColor(sf::Color(0, 0, 0, static_cast<sf::Uint8>(alpha)));
+
+                if (msg.timer <= 0) {
+                    msg.active = false;
+                }
+            }
+        }
+
         if (player.wantsToShoot()) { // Check if player initiated shoot via 'F' key
             spawnPlayerProjectile();
         }
@@ -1627,6 +1680,11 @@ private:
 
         // Draw UI elements using the default view (screen coordinates)
         window.setView(window.getDefaultView()); // Switch to default view for UI
+        for (auto& msg : tutorialMessages) {
+            if (msg.active) {
+                window.draw(msg.text);
+            }
+        }
         window.draw(playerHealthBarBackground);
         window.draw(playerHealthBarFill);
         window.draw(bossHealthBarBackground);
