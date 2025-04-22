@@ -1164,7 +1164,7 @@ public:
         player(), // Default player constructor
         // Initialize Boss position, passing target, boundaries, health
         boss({ 1000.f, 385.f }, & player, 600.f, 1250.f, 600), gameRng(rd())
-    {
+    {   
         window.setFramerateLimit(60);
         window.setVerticalSyncEnabled(true);
         initBackground(); // Load background separately
@@ -1256,10 +1256,10 @@ private:
         }
 
         std::vector<std::pair<std::string, float>> messageConfig = {
-        {"Move with A/D Space", 5.0f},
-        {"Attack with E,F,left click", 5.0f},
-        {"Dash with SHIFT", 5.0f},
-        {"Parry with Q or right click", 5.0f}
+        {"Move with A/D Space", 4.5f},
+        {"Attack E,F,left click", 5.0f},
+        {"Dash with SHIFT", 5.5f},
+        {"Parry with Q or right click", 6.f}
         };
         float verticalPosition = 150.f;
         for (auto& [msg, duration] : messageConfig) {
@@ -1568,7 +1568,8 @@ private:
         // Boss Ground Projectile
         if (boss.wantsToShootGround()) {
             sf::Vector2f startPos = boss.getPosition();
-            startPos.y += 130; // Adjust Y position for ground level
+			startPos.x += 150.f; // start position to the right of the boss for player reaction
+            startPos.y += 130; // Y position for ground level
             sf::Vector2f velocity = { -400.f, 0.f }; // Always shoots left
 
             //boss damage
