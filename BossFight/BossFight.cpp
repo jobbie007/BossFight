@@ -752,6 +752,7 @@ public:
         if (!tm.load("boss_idle", "../assets/boss/Idle.png")) std::cout << "boss idle not found";
         if (!tm.load("boss_attack1", "../assets/boss/Attack1.png")) std::cout << "boss attack1 not found";
         if (!tm.load("boss_attack2", "../assets/boss/Attack2.png")) std::cout << "boss attack2 not found";
+        if (!tm.load("boss_attack3", "../assets/boss/Attack3.png")) std::cout << "boss attack3 not found";
         if (!tm.load("boss_ultimate", "../assets/boss/Ultimate.png")) std::cout << "boss ultimate not found";
         if (!tm.load("boss_dead", "../assets/boss/Dead.png")) std::cout << "boss dead not found";
         if (!tm.load("boss_run", "../assets/boss/Run.png")) std::cout << "boss run not found";
@@ -764,8 +765,7 @@ public:
         animations.addAnimation(AnimationState::BossIdle, "boss_idle", 8, 0.15f, { 800, 800 }, true);
         animations.addAnimation(AnimationState::BossAttack1, "boss_attack1", 8, 0.12f, { 800, 800 }, false);
         animations.addAnimation(AnimationState::BossAttack2, "boss_attack2", 8, 0.12f, { 800, 800 }, false);
-        std::string attack3Tex = TextureManager::instance().get("boss_attack3") ? "boss_attack3" : "boss_attack1";
-        animations.addAnimation(AnimationState::BossAttack3, attack3Tex, 8, 0.12f, { 800, 800 }, false); // Reuse Attack1 timing
+        animations.addAnimation(AnimationState::BossAttack3, "boss_attack3", 2, 0.4f, { 800, 800 }, false);
         animations.addAnimation(AnimationState::BossUltimate, "boss_ultimate", 2, 0.3f, { 800, 800 }, false);
         animations.addAnimation(AnimationState::BossDead, "boss_dead", 9, 0.18f, { 800, 800 }, false);
         animations.addAnimation(AnimationState::BossMove, "boss_run", 8, 0.1f, { 800, 800 }, true); // Use Run animation for Move state
@@ -936,7 +936,7 @@ private:
     float attackCooldown1 = 1.5f;
     float attackCooldown2 = 2.5f;
     float attackCooldown3 = 3.0f;
-    float ultimateCooldown = 15.0f;
+    float ultimateCooldown = 8.0f;
     float currentAttackCooldown1 = 0.f;
     float currentAttackCooldown2 = 0.f;
     float currentAttackCooldown3 = 0.f;
@@ -994,7 +994,6 @@ private:
                 break;
             case BossState::Moving:
                 animations.play(AnimationState::BossMove);
-                // Velocity set in startMoving()
                 break;
             case BossState::Attacking1:
                 velocity.x = 0;
@@ -1139,7 +1138,7 @@ private:
         else if (animState == AnimationState::BossAttack2 && currentFrame >= 4 && currentFrame <= 8) {
             attackActive = true;
         }
-        if (animState == AnimationState::BossAttack3 && currentFrame == 2) {
+        if (animState == AnimationState::BossAttack3 && currentFrame == 1) {
             triggerMidProjectile = true; // Signal BossGame
             // std::cout << "[Boss] Triggering Mid Projectile (Frame " << currentFrame << ")" << std::endl;
         }
@@ -1164,7 +1163,7 @@ public:
         window(sf::VideoMode(1280, 720), "Final Boss"),
         player(), // Default player constructor
         // Initialize Boss position, passing target, boundaries, health
-        boss({ 950.f, 385.f }, & player, 600.f, 1250.f, 600), gameRng(rd())
+        boss({ 1000.f, 385.f }, & player, 600.f, 1250.f, 600), gameRng(rd())
     {
         window.setFramerateLimit(60);
         window.setVerticalSyncEnabled(true);
@@ -1527,11 +1526,9 @@ private:
 
         // Boss Mid Projectile (Attack 3)
         if (boss.wantsToShootMid()) {
-            sf::Vector2f startPos = boss.getPosition();
+            sf::Vector2f startPos = { boss.getPosition().x, boss.getPosition().y + std::uniform_real_distribution<float>(-20.f, 20.f)(gameRng) };
             startPos.y -= 10; // Adjust Y
-            float speed = 500.f;
-            // Assume boss faces left always for simplicity, adjust if boss faces player
-            sf::Vector2f velocity = { -speed, 0.f };
+            sf::Vector2f velocity = { -500.f, 0.f };
             spawnBossProjectile("boss_projectile_mid", startPos, velocity, 10);
             boss.resetMidProjectileRequest();
         }
