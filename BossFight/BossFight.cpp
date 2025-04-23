@@ -57,7 +57,7 @@ public:
 
     void addAnimation(AnimationState state, const std::string& textureId, int frames, float duration, sf::Vector2i size, bool loop) {
         if (auto tex = TextureManager::instance().get(textureId)) {
-            animations[state] = { tex, frames, duration, size, loop };
+            animations.emplace(state,Animation{ tex, frames, duration, size, loop });
         }
         else {
             std::cerr << "[AnimationComponent] Error: Texture " << textureId << " not found." << std::endl;
@@ -65,61 +65,50 @@ public:
     }
 
     void update(float dt) {
-        if (currentState != AnimationState::None && animations.count(currentState)) {
-            auto& anim = animations[currentState];
+        auto it = animations.find(currentState);
+        if (it == animations.end()) return;
+        auto& anim = it->second;
+        if (!anim.texture || (!anim.loops && _isDone)) return;
 
+        elapsedTime += dt;
+        if (elapsedTime < anim.frameDuration) return;
 
-            if (!anim.texture) {
-                std::cerr << "[AnimationComponent] Error: Update called on state " << static_cast<int>(currentState) << " with null texture." << std::endl;
-                return;
+        int advance = int(elapsedTime / anim.frameDuration);
+        elapsedTime = std::fmod(elapsedTime, anim.frameDuration);
+        currentFrame += advance;
+
+        if (currentFrame >= anim.frameCount) {
+            if (anim.loops) {
+                currentFrame %= anim.frameCount;
             }
-
-            if (!anim.loops && isDone()) {
-                return; // Don't update non-looping finished animations
-            }
-            elapsedTime += dt;
-
-            if (elapsedTime >= anim.frameDuration) {
-                // Use integer division to handle potential frame skips if dt is large
-                int frameAdvancement = static_cast<int>(elapsedTime / anim.frameDuration);
-                elapsedTime = std::fmod(elapsedTime, anim.frameDuration); // Keep remainder
-
-                currentFrame += frameAdvancement;
-
-                if (currentFrame >= anim.frameCount) {
-                    if (anim.loops) {
-                        currentFrame %= anim.frameCount; // Loop back
-                    }
-                    else {
-                        currentFrame = anim.frameCount - 1; // Clamp to last frame
-                        _isDone = true;
-                    }
-                }
-
-                sprite.setTextureRect(sf::IntRect(anim.frameSize.x * currentFrame, 0,anim.frameSize.x, anim.frameSize.y));
+            else {
+				currentFrame = anim.frameCount - 1; // Stay on last frame
+                _isDone = true;
             }
         }
+
+        sprite.setTextureRect({anim.frameSize.x * currentFrame, 0,anim.frameSize.x, anim.frameSize.y});
     }
 
     void play(AnimationState state) {
-        if (state != currentState || !animations[state].loops) { // Allow restarting non-looping
-            const auto& anim = animations[state];
+        auto it = animations.find(state);
+        if (it == animations.end()) return;
+        auto& anim = it->second;
+        if (state == currentState && anim.loops) return;
 
-            currentState = state;
-            currentFrame = 0;
-            elapsedTime = 0.f;
-            _isDone = false;
+        currentState = state;
+        currentFrame = 0;
+        elapsedTime = 0.f;
+        _isDone = false;
 
-            sprite.setTexture(*anim.texture);
-            sprite.setTextureRect(sf::IntRect(0, 0, anim.frameSize.x, anim.frameSize.y));
-            sprite.setOrigin(static_cast<float>(anim.frameSize.x) / 2.f, static_cast<float>(anim.frameSize.y) / 2.f);
-        }
+        sprite.setTexture(*anim.texture);
+        sprite.setTextureRect({ 0,0, anim.frameSize.x, anim.frameSize.y });
+        sprite.setOrigin(anim.frameSize.x / 2.f, anim.frameSize.y / 2.f);
     }
 
     bool isDone() const {
-        if (currentState != AnimationState::None && animations.count(currentState)) {
-            const auto& anim = animations.at(currentState);
-            return !anim.loops && _isDone;
+        if (auto it = animations.find(currentState); it != animations.end()) {
+            return !it->second.loops && _isDone;
         }
         return true;
     }
@@ -159,7 +148,6 @@ public:
             std::cerr << "[Projectile] Error: Null texture provided." << std::endl;
             active = false; // Deactivate if no texture
         }
-        sprite.setScale(0.5f, 0.5f); //  scale adjustment to half size
     }
 
     //  Update projectile position
@@ -186,7 +174,7 @@ public:
         return active;
     }
 
-    // Deactivate the projectile (e.g., on hit or off-screen)
+    // Deactivate the projectile ( on hit or off screen)
     void setActive(bool status) {
         active = status;
     }
@@ -201,7 +189,7 @@ public:
         return damage;
     }
 
-    //  Get current position (useful for boundary checks)
+    //  Get current position (for boundary checks)
     sf::Vector2f getPosition() const {
         return position;
     }
@@ -729,15 +717,13 @@ public:
     Boss(sf::Vector2f startPos, Player* playerTarget, float bLeft, float bRight, int maxHealth = 500) :position(startPos), targetPlayer(playerTarget),
         leftBoundary(bLeft), rightBoundary(bRight), maxHealth(maxHealth), currentHealth(maxHealth), currentState(BossState::Idle), rng(rd())
     {
-        //minimum and maximum move duration
-        moveDurationDistribution = std::uniform_real_distribution<float>(0.4f, 1.f);
         loadResources();
         initAnimations();
         animations.getSprite().setPosition(position);
         animations.getSprite().setScale(-1.f, 1.f);
 
         // Initialize RNG distributions
-        actionChoiceDistribution = std::uniform_int_distribution<int>(0, 2);
+		actionChoiceDistribution = std::uniform_int_distribution<int>(0, 2); // For 3 attack types (0, 1, 2)
         groundAttackIntervalDistribution = std::uniform_real_distribution<float>(groundAttackIntervalMin, groundAttackIntervalMax);
         groundAttackTimer = groundAttackIntervalDistribution(rng);
 
@@ -746,15 +732,15 @@ public:
 
     void loadResources() {
         auto& tm = TextureManager::instance();
-        if (!tm.load("boss_idle", "../assets/boss/Idle.png")) std::cout << "boss idle not found";
-        if (!tm.load("boss_attack1", "../assets/boss/Attack1.png")) std::cout << "boss attack1 not found";
-        if (!tm.load("boss_attack2", "../assets/boss/Attack2.png")) std::cout << "boss attack2 not found";
-        if (!tm.load("boss_attack3", "../assets/boss/Attack3.png")) std::cout << "boss attack3 not found";
-        if (!tm.load("boss_ultimate", "../assets/boss/Ultimate.png")) std::cout << "boss ultimate not found";
-        if (!tm.load("boss_dead", "../assets/boss/Dead.png")) std::cout << "boss dead not found";
-        if (!tm.load("boss_projectile_ground", "../assets/boss/Projectile_Ground.png")) std::cerr << "Failed to load boss_projectile_ground\n";
-        if (!tm.load("boss_projectile_mid", "../assets/boss/Projectile_Mid.png")) std::cerr << "Failed to load boss_projectile_mid\n";
-        if (!tm.load("boss_projectile_rain", "../assets/boss/Projectile_Rain.png")) std::cerr << "Failed to load boss_projectile_rain\n";
+        tm.load("boss_idle", "../assets/boss/Idle.png");
+        tm.load("boss_attack1", "../assets/boss/Attack1.png");
+        tm.load("boss_attack2", "../assets/boss/Attack2.png");
+        tm.load("boss_attack3", "../assets/boss/Attack3.png");
+        tm.load("boss_ultimate", "../assets/boss/Ultimate.png");
+        tm.load("boss_dead", "../assets/boss/Dead.png");
+        tm.load("boss_projectile_ground", "../assets/boss/Projectile_Ground.png");
+        tm.load("boss_projectile_mid", "../assets/boss/Projectile_Mid.png");
+        tm.load("boss_projectile_rain", "../assets/boss/Projectile_Rain.png");
     }
 
     void initAnimations() {
@@ -875,27 +861,16 @@ public:
 
         return sf::FloatRect(
             xPosition - width / 2,
-            position.y - height / 2 + HITBOX_Y_OFFSET,
+			position.y - height / 2 + 30, // Adjusted since boss height is higher
             width,
             height
         );
     }
 
-    sf::Vector2f getPosition() const {
-        return animations.getSprite().getPosition();
-    }
-
-    bool isAlive() const {
-        return currentState != BossState::Dead;
-    }
-
-    bool isAttackActive() const {
-        return attackActive;
-    }
-
-    bool isMeleeAttackActive() const {
-        return attackActive;
-    }
+    sf::Vector2f getPosition() const {return animations.getSprite().getPosition();}
+    bool isAlive() const {return currentState != BossState::Dead;}
+    bool isAttackActive() const {return attackActive;}
+    bool isMeleeAttackActive() const {return attackActive;}
     int getHealth() const { return currentHealth; }
     int getMaxHealth() const { return maxHealth; }
     bool wantsToShootGround() const { return triggerGroundProjectile; }
@@ -918,20 +893,21 @@ private:
     BossState currentState = BossState::Idle;
 
     // Combat parameters
-    float timeSinceLastAction = 0.f;
     float currentActionDelay = 2.0f;
     float attackCooldown1 = 1.5f;
     float attackCooldown2 = 2.5f;
     float attackCooldown3 = 3.0f;
     float ultimateCooldown = 8.0f;
+    const sf::Vector2f NORMAL_HITBOX = { 150.f, 200.f };
+    const sf::Vector2f ATTACK_HITBOX = { 220.f, 200.f }; // Wider hitbox for attacks
+  
+    //Tracker variables
+    float timeSinceLastAction = 0.f;
     float currentAttackCooldown1 = 0.f;
     float currentAttackCooldown2 = 0.f;
     float currentAttackCooldown3 = 0.f;
     float currentUltimateCooldown = 0.f;
     bool attackActive = false;
-    const sf::Vector2f NORMAL_HITBOX = { 150.f, 200.f };
-    const sf::Vector2f ATTACK_HITBOX = { 220.f, 200.f }; // Wider hitbox for attacks
-    const float HITBOX_Y_OFFSET = 30.f;
 
     // Ground Attack variables
     float groundAttackTimer = 0.f;
@@ -942,7 +918,7 @@ private:
     bool triggerMidProjectile = false;
     bool triggerRainProjectile = false; // Flag to signal spawn
     float rainSpawnTimer = 0.f; // Timer within ultimate to spawn projectiles
-    const float rainSpawnInterval = 0.15f;
+    const float rainSpawnInterval = 0.15f; //how much delay after animation
 
     // Flash effect
     float flashTimer = 0.f;
@@ -953,11 +929,9 @@ private:
     sf::Color damageColor = sf::Color(200, 80, 80, 200);
 
     // Random number generation
-    std::random_device rd;
+    std::random_device rd; //Creates a non-deterministic random bit generator
     std::mt19937 rng;
     std::uniform_int_distribution<int> actionChoiceDistribution;
-    std::uniform_int_distribution<int> moveDirectionDistribution;
-    std::uniform_real_distribution<float> moveDurationDistribution;
     std::uniform_int_distribution<int> attackChoiceDistribution;
 
     bool isInvulnerable() const {
@@ -975,23 +949,18 @@ private:
 
             switch (newState) {
             case BossState::Idle:
-                velocity.x = 0;
                 animations.play(AnimationState::BossIdle);
                 break;
             case BossState::Attacking1:
-                velocity.x = 0;
                 animations.play(AnimationState::BossAttack1);
                 break;
             case BossState::Attacking2:
-                velocity.x = 0;
                 animations.play(AnimationState::BossAttack2);
                 break;
             case BossState::Attacking3:
-                velocity.x = 0;
                 animations.play(AnimationState::BossAttack3);
                 break;
             case BossState::Ultimate:
-                velocity.x = 0;
                 animations.play(AnimationState::BossUltimate);
                 rainSpawnTimer = 0.f; // Reset rain timer on entering ultimate
                 break;
@@ -1003,8 +972,8 @@ private:
     }
 
     void startActionDelay() {
-        std::uniform_real_distribution<float> delayVar(0.8f, 1.3f);
-        currentActionDelay = 1.8f * delayVar(rng);
+        std::uniform_real_distribution<float> delayVar(0.8f, 1.3f); 
+		currentActionDelay = 1.8f * delayVar(rng);// Randomize delay between 0.8 and 1.3 seconds
         timeSinceLastAction = 0.f;
     }
 
@@ -1014,8 +983,8 @@ private:
             return;
         }
 
-        // Choose randomly between Attack1, Attack2, Attack3, Move
-        int action = actionChoiceDistribution(rng); // 0, 1, 2, 3
+        // Choose randomly between Attack1, Attack2, Attack3
+        int action = actionChoiceDistribution(rng); // 0, 1, 2
 
         // Try the chosen action if cooldown allows, otherwise default to delaying again
         if (action == 0 && currentAttackCooldown1 <= 0.f) performAttack1();
@@ -1087,10 +1056,10 @@ private:
         triggerMidProjectile = false;
         triggerRainProjectile = false;
 
-        if (animState == AnimationState::BossAttack1 && currentFrame >= 3 && currentFrame <= 6) {
+        if (animState == AnimationState::BossAttack1 && currentFrame >= 4 && currentFrame <= 7) {
             attackActive = true;
         }
-        else if (animState == AnimationState::BossAttack2 && currentFrame >= 4 && currentFrame <= 8) {
+        else if (animState == AnimationState::BossAttack2 && currentFrame >= 2 && currentFrame <= 6) {
             attackActive = true;
         }
         if (animState == AnimationState::BossAttack3 && currentFrame == 1) {
@@ -1100,7 +1069,7 @@ private:
 
         if (animState == AnimationState::BossUltimate && currentFrame >= 1 && currentFrame <= 2) {
             // Use a timer to spawn projectiles at intervals during the rain phase
-            rainSpawnTimer += 1; // Approximating dt passed within this frame check
+            rainSpawnTimer += 1; //  dt passed within this frame check
             if (rainSpawnTimer >= rainSpawnInterval) {
                 triggerRainProjectile = true; // Signal BossGame to spawn one projectile
                 rainSpawnTimer = 0.f; // Reset interval timer
@@ -1149,11 +1118,13 @@ private:
     std::random_device rd; // Obtain a random seed
     std::mt19937 gameRng;
     bool showDebugBoxes = false;
+
+	// UI elements
     sf::RectangleShape playerHealthBarBackground;
     sf::RectangleShape playerHealthBarFill;
     const float HEALTH_BAR_WIDTH = 300.f;
     const float HEALTH_BAR_HEIGHT = 20.f;
-    const float HEALTH_BAR_PADDING = 10.f; // Unused in original positioning logic
+    const float HEALTH_BAR_PADDING = 10.f;
     const float HEALTH_BAR_POS_X = 25.f;
     const float HEALTH_BAR_POS_Y = 25.f;
 
@@ -1167,7 +1138,6 @@ private:
     //hitboxes
     const sf::Vector2f PLAYER_HITBOX_SIZE = { 60.f, 80.f };
     const sf::Vector2f BOSS_HITBOX_SIZE = { 150.f, 200.f };
-    const float BOSS_HITBOX_Y_OFFSET = 30.f;
 
     struct TutorialMessage {
         sf::Text text;
@@ -1184,7 +1154,7 @@ private:
     void initBackground() {
         // Load background using TextureManager
         if (!TextureManager::instance().load("background", "../assets/background.png")) {
-            std::cerr << "[Game] Failed to load background texture in Texturemanager." << std::endl;
+            std::cerr << "[Game] Failed to load background" << std::endl;
         }
         sf::Texture* bgTexture = TextureManager::instance().get("background");
         if (bgTexture) {
@@ -1275,9 +1245,9 @@ private:
     sf::FloatRect getPlayerHitbox() const {
         sf::Vector2f pos = player.getPosition();
         return {
-            pos.x - PLAYER_HITBOX_SIZE.x / 2,
+            pos.x - PLAYER_HITBOX_SIZE.x / 2, //shrink hitbox by half as starting point
             pos.y - PLAYER_HITBOX_SIZE.y / 2,
-            PLAYER_HITBOX_SIZE.x,
+            PLAYER_HITBOX_SIZE.x,             //set custom hitbox size
             PLAYER_HITBOX_SIZE.y
         };
     }
@@ -1286,7 +1256,7 @@ private:
         sf::Vector2f pos = boss.getPosition();
         return {
             pos.x - BOSS_HITBOX_SIZE.x / 2,
-            pos.y - BOSS_HITBOX_SIZE.y / 2 + BOSS_HITBOX_Y_OFFSET,
+            pos.y - BOSS_HITBOX_SIZE.y / 2 + 30, //boss hitbox starting position taller than half
             BOSS_HITBOX_SIZE.x,
             BOSS_HITBOX_SIZE.y
         };
@@ -1310,8 +1280,8 @@ private:
                     case sf::Keyboard::Q:     player.parry(); break;
                     case sf::Keyboard::F:     player.shoot(); break;
                         // Debug keys 
-                    case sf::Keyboard::T: player.takeDamage(10); break;
-                    case sf::Keyboard::N: player.death(); break;
+					case sf::Keyboard::T: player.takeDamage(10); break;  // player damage
+					case sf::Keyboard::N: player.death(); break;         // Force player death
                         // Boss Debug Keys
                     case sf::Keyboard::Y: boss.takeDamage(100); break;   // Boss take damage
                     case sf::Keyboard::M: boss.death(); break;           // Force boss death
@@ -1343,10 +1313,6 @@ private:
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) movement.x -= 1.f;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) movement.x += 1.f;
             player.move(movement); // Pass direction based on held keys
-        }
-        else {
-            // Ensure movement stops completely if dead
-            player.move({ 0.f, 0.f });
         }
     }
 
@@ -1468,7 +1434,7 @@ private:
         }
 
         sf::Vector2f startPos = player.getPosition();
-        startPos.y -= 0; // Adjust start height slightly if needed
+		startPos.x += 50; // Offset to the right of the player
 
         float projectileSpeed = 800.f;
         sf::Vector2f velocity;
@@ -1523,7 +1489,7 @@ private:
         // Boss Ground Projectile
         if (boss.wantsToShootGround()) {
             sf::Vector2f startPos = boss.getPosition();
-			startPos.x += 150.f; // start position to the right of the boss for player reaction
+			startPos.x += 160.f; // start position to the right of the boss for player reaction
             startPos.y += 130; // Y position for ground level
             sf::Vector2f velocity = { -400.f, 0.f }; // Always shoots left
 
@@ -1562,7 +1528,7 @@ private:
                 it->setActive(false);
             }
 
-            // Remove inactive projectiles using erase-remove idiom logic
+            // Remove inactive projectiles
             if (!it->isActive()) {
                 it = projectiles.erase(it); // Erase returns iterator to the next element
             }
@@ -1571,7 +1537,7 @@ private:
             }
         }
 
-        const float bossHitboxThird = BOSS_HITBOX_SIZE.x / 3;
+        const float bossHitboxThird = BOSS_HITBOX_SIZE.x / 3; 
         const float bossLeftEdge = boss.getPosition().x - (BOSS_HITBOX_SIZE.x / 2);
         player.setRightBoundary(bossLeftEdge + bossHitboxThird - (PLAYER_HITBOX_SIZE.x / 2));
 
