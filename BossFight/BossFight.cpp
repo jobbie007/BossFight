@@ -9,25 +9,27 @@
 
 // --- Texture Manager ---
 class TextureManager {
-    std::map<std::string, std::unique_ptr<sf::Texture>> textures;
-public:
+    std::map<std::string, sf::Texture> textures;
+public://allows one local TextureManager globally
     static TextureManager& instance() {
         static TextureManager tm;
         return tm;
     }
 
     bool load(const std::string& id, const std::string& path) {
-        auto texture = std::make_unique<sf::Texture>();
-        if (texture->loadFromFile(path)) {
-            textures[id] = std::move(texture);
+        sf::Texture texture;
+        if (texture.loadFromFile(path)) {
+            textures.emplace(id, std::move(texture));
             return true;
         }
         return false;
     }
 
-    sf::Texture* get(const std::string& id) const {
+    sf::Texture* get(const std::string& id) {
         auto it = textures.find(id);
-        return it != textures.end() ? it->second.get() : nullptr;
+        if (it != textures.end())
+            return &it->second;
+        return nullptr;
     }
 };
 
@@ -94,10 +96,7 @@ public:
                     }
                 }
 
-                sprite.setTextureRect(sf::IntRect(
-                    anim.frameSize.x * currentFrame, 0,
-                    anim.frameSize.x, anim.frameSize.y
-                ));
+                sprite.setTextureRect(sf::IntRect(anim.frameSize.x * currentFrame, 0,anim.frameSize.x, anim.frameSize.y));
             }
         }
     }
@@ -160,7 +159,7 @@ public:
             std::cerr << "[Projectile] Error: Null texture provided." << std::endl;
             active = false; // Deactivate if no texture
         }
-        sprite.setScale(0.5f, 0.5f); //  scale adjustment
+        sprite.setScale(0.5f, 0.5f); //  scale adjustment to half size
     }
 
     //  Update projectile position
@@ -257,7 +256,7 @@ public:
         animations.addAnimation(AnimationState::Idle, "player_idle", 8, 0.2f, { 160, 128 }, true);
         animations.addAnimation(AnimationState::Run, "player_run", 8, 0.1f, { 160, 128 }, true);
         animations.addAnimation(AnimationState::Attack1, "player_attack1", 6, 0.05f, { 160, 128 }, false);
-        animations.addAnimation(AnimationState::Attack2, "player_attack2", 5, 0.06f, { 160, 128 }, false);
+        animations.addAnimation(AnimationState::Attack2, "player_attack2", 10, 0.035f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Attack3, "player_attack3", 16, 0.019f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Jump, "player_jump", 11, 0.08f, { 160, 128 }, false);
         animations.addAnimation(AnimationState::Dash, "player_dash", 5, 0.036f, { 160, 128 }, false);
@@ -453,7 +452,7 @@ public:
     int getMaxHealth() const { return maxHealth; }
     bool isAlive() const { return currentHealth > 0; }
 
-    // Use visual bounds for collision checks as per original code
+    // Use visual bounds for collision checks
     sf::FloatRect getGlobalBounds() const {
         return animations.getSprite().getGlobalBounds();
     }
