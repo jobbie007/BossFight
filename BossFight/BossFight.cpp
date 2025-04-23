@@ -838,8 +838,14 @@ public:
     }
 
     sf::FloatRect getAttackHitbox() const {
-        sf::FloatRect normal = getGlobalBounds();
-        return sf::FloatRect(normal.left, normal.top, normal.width, normal.height);
+        
+        float width = ATTACK_HITBOX.x;
+        return sf::FloatRect(
+            position.x + -90 - width / 2, 
+            position.y - NORMAL_HITBOX.y / 2 + 30,
+            width,
+            NORMAL_HITBOX.y
+        );
     }
 
     sf::FloatRect getGlobalBounds() const {
@@ -849,14 +855,11 @@ public:
         float width = isAttacking ? ATTACK_HITBOX.x : NORMAL_HITBOX.x;
         float height = NORMAL_HITBOX.y;
 
-        // Get facing direction from sprite scale
-        float direction = animations.getSprite().getScale().x > 0 ? 1.f : -1.f;
-
         // Calculate horizontal position based on direction and attack state
         float xPosition = position.x;
         if (isAttacking) {
-            // Center of attack hitbox extends in facing direction
-            xPosition += (NORMAL_HITBOX.x / 2 * direction);
+            // Center of attack hitbox extends 
+            xPosition += (-NORMAL_HITBOX.x / 2 );
         }
 
         return sf::FloatRect(
@@ -1056,10 +1059,10 @@ private:
         triggerMidProjectile = false;
         triggerRainProjectile = false;
 
-        if (animState == AnimationState::BossAttack1 && currentFrame >= 4 && currentFrame <= 7) {
+        if (animState == AnimationState::BossAttack1 && currentFrame >= 5 && currentFrame <= 6) {
             attackActive = true;
         }
-        else if (animState == AnimationState::BossAttack2 && currentFrame >= 2 && currentFrame <= 6) {
+        else if (animState == AnimationState::BossAttack2 && currentFrame >= 6 && currentFrame <= 7) {
             attackActive = true;
         }
         if (animState == AnimationState::BossAttack3 && currentFrame == 1) {
@@ -1575,8 +1578,6 @@ private:
             bossBox.setOutlineColor(sf::Color::Red);
             bossBox.setOutlineThickness(2.f);
             window.draw(bossBox);
-
-
 
             sf::FloatRect attackBox = boss.getAttackHitbox();
             sf::RectangleShape attackRect(sf::Vector2f(attackBox.width, attackBox.height));
