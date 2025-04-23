@@ -208,10 +208,18 @@ private:
 // --- Player Class ---
 class Player {
 public:
-    Player(int maxHealth = 100, int currentHealth = 100) :
+    Player(int maxHealth = 100, int currentHealth = 100,
+        bool enableDash = true, float parrySuccessTime = 0.8f,
+        int baseAttackDamage = 20, float defensePercent = 0.0f,
+        bool enableShoot = true) :
         maxHealth(maxHealth),
         currentHealth(currentHealth),
-        rng(std::random_device{}()) // Initialize member RNG
+        enableDash(enableDash),
+        parrySuccessDuration(parrySuccessTime),
+        attackDamage(baseAttackDamage),
+        defensePercent(std::clamp(defensePercent, 0.0f, 1.0f)),
+        enableShoot(enableShoot),
+        rng(std::random_device{}())
     {
         loadResources();
         initAnimations();
@@ -347,7 +355,7 @@ public:
     }
 
     void dash() {
-        if (isHurt || !isAlive()) return;
+        if (isHurt || !isAlive() || !enableDash) return;
 
         if (canDash && dashTimer <= 0 && !isAttacking() && animations.getCurrentState() != AnimationState::Parry) {
             velocity.x = facingRight ? dashSpeed : -dashSpeed;
@@ -366,7 +374,7 @@ public:
             animations.play(AnimationState::Parry);
             canParry = false;
             parryTimer = parryCooldown;
-            parrySuccessWindow = PARRY_SUCCESS_DURATION;
+            parrySuccessWindow = parrySuccessDuration;
             if (isGrounded) {
                 velocity.x = 0; // Stop movement while parrying on ground
             }
@@ -392,7 +400,7 @@ public:
     }
 
     void shoot() {
-        if (isHurt || !isAlive() || !canShoot || isAttacking() || animations.getCurrentState() == AnimationState::Parry || dashTimer > 0) return;
+        if (isHurt || !isAlive() || !canShoot || isAttacking() || animations.getCurrentState() == AnimationState::Parry || dashTimer > 0 ||!enableShoot) return;
 
         canShoot = false;
         shootTimer = shootCooldown;
@@ -415,9 +423,10 @@ public:
             return;
         }
 
-        currentHealth -= amount;
+        int actualDamage = static_cast<int>(amount * (1 - defensePercent));
+        currentHealth -= actualDamage;
         currentHealth = std::max(0, currentHealth);
-        std::cout << "[Player] Took " << amount << " damage. Health: " << currentHealth << "/" << maxHealth << std::endl;
+        std::cout << "[Player] Took " << actualDamage << " damage. Health: " << currentHealth << "/" << maxHealth << std::endl;
         if (isAlive()) {
             isHurt = true;
             hurtTimer = hurtDuration;
@@ -436,6 +445,7 @@ public:
         }
     }
 
+    int getAttackDamage() const { return attackDamage; }
     int getHealth() const { return currentHealth; }
     int getMaxHealth() const { return maxHealth; }
     bool isAlive() const { return currentHealth > 0; }
@@ -449,9 +459,6 @@ public:
         target.draw(animations.getSprite());
     }
 
-    void setRightBoundary(float boundary) {
-        rightBoundary = boundary;
-    }
     bool getFaceingRight() { return facingRight; }
 
     // Added helper for collision detection logic
@@ -473,8 +480,7 @@ private:
     sf::Vector2f velocity = { 0.f, 0.f };
     bool facingRight = true;
     bool isGrounded = true;
-    const float LEFT_BOUNDARY = 1.0f;
-    float rightBoundary = 1280.0f;
+    const float LEFT_BOUNDARY = 1.0f;   
     //input health from constructor
     int maxHealth;
     int currentHealth;
@@ -506,10 +512,16 @@ private:
     float parryCooldown = 0.8f;
     float parryTimer = 0.f;
     float parrySuccessWindow = 0.0f;
-    const float PARRY_SUCCESS_DURATION = 0.8f;
+
+    //constructor changeable variables
+	float parrySuccessDuration;
+    int attackDamage;
+    float defensePercent;
+    bool enableShoot;
+    bool enableDash;
 
     float knockbackForceX = 60.f; // Horizontal knockback speed
-    float knockbackForceY = -300.f; // Vertical knockback speed
+    float knockbackForceY = -300.f; // Vertical knockback speed (up)
 
     bool isHurt = false;
     float hurtDuration = 0.4f;
@@ -534,7 +546,6 @@ private:
         // Calculate proposed next position
         sf::Vector2f proposedPosition = position + velocity * dt;
 
-
         // Ground Collision
         if (proposedPosition.y >= groundLevel) {
             proposedPosition.y = groundLevel;
@@ -557,13 +568,14 @@ private:
 
 
         const float LEFT_BOUNDARY = 25.0f;  // Hardcoded left limit
+		const float RIGHT_BOUNDARY = 1060.0f; // Hardcoded right limit
         // Left boundary check
         if (proposedPosition.x < LEFT_BOUNDARY) {
             proposedPosition.x = LEFT_BOUNDARY;  // Snap to boundary
             if (velocity.x < 0) velocity.x = 0;  // Stop leftward movement
         }
-        if (proposedPosition.x > rightBoundary) {
-            proposedPosition.x = rightBoundary;
+		if (proposedPosition.x > RIGHT_BOUNDARY) { // Right boundary check (by boss)
+            proposedPosition.x = RIGHT_BOUNDARY;
             if (velocity.x > 0) velocity.x = 0;
         }
 
@@ -663,7 +675,7 @@ private:
                 dashCooldownTimer = 0;
 
                 if (isGrounded) {
-                    canDash = true;
+                    canDash = true && enableDash;
                 }
             }
         }
@@ -701,7 +713,7 @@ private:
             shootTimer -= dt;
             if (shootTimer <= 0) {
                 shootTimer = 0;
-                canShoot = true;
+				canShoot = true && enableShoot;
             }
         }
     }
@@ -1086,15 +1098,23 @@ private:
 class BossGame {
 public:
 
-    BossGame() :
-        window(sf::VideoMode(1280, 720), "Final Boss"),
-        player(), // Default player constructor
-        // Initialize Boss position, passing target, boundaries, health
-        boss({ 1100.f, 385.f }, & player, 600.f, 1250.f, 600), gameRng(rd())
-    {   
+    BossGame()
+        : window(sf::VideoMode(1280, 720), "Final Boss"),
+        player(
+            100,     // maxHealth
+            100,     // currentHealth
+            true,    // enableDash
+            0.8f,    // parrySuccessTime
+            20,      // baseAttackDamage
+            0.f,     // defensePercent
+            true     // enableShoot 
+		),
+        boss({ 1100.f, 385.f }, & player, 600.f, 1250.f, 600),
+        gameRng(rd())
+    {
         window.setFramerateLimit(60);
         window.setVerticalSyncEnabled(true);
-        initBackground(); // Load background separately
+        initBackground();
         setupUI();
     }
 
@@ -1540,9 +1560,6 @@ private:
             }
         }
 
-        const float bossHitboxThird = BOSS_HITBOX_SIZE.x / 3; 
-        const float bossLeftEdge = boss.getPosition().x - (BOSS_HITBOX_SIZE.x / 2);
-        player.setRightBoundary(bossLeftEdge + bossHitboxThird - (PLAYER_HITBOX_SIZE.x / 2));
 
         handleCollisions(); // collision checks
         updateUI(); // Update health bars for both
@@ -1572,8 +1589,9 @@ private:
             playerBox.setOutlineThickness(2.f);
             window.draw(playerBox);
 
-            sf::RectangleShape bossBox(sf::Vector2f(getBossHitbox().width, getBossHitbox().height));
-            bossBox.setPosition(getBossHitbox().left, getBossHitbox().top);
+            sf::FloatRect bossBounds = boss.getGlobalBounds();
+            sf::RectangleShape bossBox(sf::Vector2f(bossBounds.width, bossBounds.height));
+            bossBox.setPosition(bossBounds.left, bossBounds.top);
             bossBox.setFillColor(sf::Color::Transparent);
             bossBox.setOutlineColor(sf::Color::Red);
             bossBox.setOutlineThickness(2.f);
@@ -1581,7 +1599,7 @@ private:
 
             sf::FloatRect attackBox = boss.getAttackHitbox();
             sf::RectangleShape attackRect(sf::Vector2f(attackBox.width, attackBox.height));
-            attackRect.setPosition(attackBox.left, attackBox.top);
+            attackRect.setPosition(attackBox.left+15, attackBox.top);
             attackRect.setFillColor(sf::Color::Transparent);
             attackRect.setOutlineColor(sf::Color::Magenta);
             attackRect.setOutlineThickness(2.f);
