@@ -1105,9 +1105,9 @@ public:
             100,     // currentHealth
             true,    // enableDash
             0.8f,    // parrySuccessTime
-            20,      // baseAttackDamage
+            15,      // baseAttackDamage
             0.f,     // defensePercent
-            true     // enableShoot 
+            true     // enableShoot
 		),
         boss({ 1100.f, 385.f }, & player, 600.f, 1250.f, 600),
         gameRng(rd())
