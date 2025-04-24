@@ -1262,7 +1262,7 @@ private:
     const float HEALTH_BAR_POS_Y = 25.f;
     sf::Clock gameClock; // play time
     sf::Text timerText;
-    sf::Time endScreen = sf::seconds(3);
+    sf::Time endScreen = sf::seconds(5);
     sf::Text endGameText;
 
     sf::RectangleShape bossHealthBarBackground;
@@ -1832,7 +1832,7 @@ int main() {
     int totalSeconds = static_cast<int>(game.finalTime.asSeconds());
     int minutes = totalSeconds / 60;
     int seconds = totalSeconds % 60;
-    std::cout << (minutes < 10 ? "0" : "") << minutes << ":" << (seconds < 10 ? "0" : "") << seconds << std::endl;
-    std::cout << game.finalTime.asSeconds();
+    std::cout << minutes << ":" << seconds << std::endl;
+    std::cout << game.finalTime.asSeconds() << " seconds";
     return 0;
 }
