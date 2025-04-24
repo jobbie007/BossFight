@@ -189,7 +189,7 @@ public:
 
     void addAnimation(AnimationState state, const std::string& textureId, int frames, float duration, sf::Vector2i size, bool loop) {
         if (auto tex = TextureManager::instance().get(textureId)) {
-            animations.emplace(state,Animation{ tex, frames, duration, size, loop });
+            animations.emplace(state, Animation{ tex, frames, duration, size, loop });
         }
         else {
             std::cerr << "[AnimationComponent] Error: Texture " << textureId << " not found." << std::endl;
@@ -214,12 +214,12 @@ public:
                 currentFrame %= anim.frameCount;
             }
             else {
-				currentFrame = anim.frameCount - 1; // Stay on last frame
+                currentFrame = anim.frameCount - 1; // Stay on last frame
                 _isDone = true;
             }
         }
 
-        sprite.setTextureRect({anim.frameSize.x * currentFrame, 0,anim.frameSize.x, anim.frameSize.y});
+        sprite.setTextureRect({ anim.frameSize.x * currentFrame, 0,anim.frameSize.x, anim.frameSize.y });
     }
 
     void play(AnimationState state) {
@@ -446,7 +446,7 @@ public:
 
     void move(sf::Vector2f direction) {
         if (isHurt || !isAlive()) return; // Block input if hurt or dead
-       
+
         // Allow movement unless dashing or attacking/parrying on the ground
         if (dashTimer <= 0 && !(isGrounded && (isAttacking() || animations.getCurrentState() == AnimationState::Parry))) {
             if (direction.x != 0.f) {
@@ -529,7 +529,7 @@ public:
     }
 
     void shoot() {
-        if (isHurt || !isAlive() || !canShoot || isAttacking() || animations.getCurrentState() == AnimationState::Parry || dashTimer > 0 ||!enableShoot) return;
+        if (isHurt || !isAlive() || !canShoot || isAttacking() || animations.getCurrentState() == AnimationState::Parry || dashTimer > 0 || !enableShoot) return;
         SoundManager::instance().play("player_shoot");
         canShoot = false;
         shootTimer = shootCooldown;
@@ -593,14 +593,14 @@ public:
     // Added helper for collision detection logic
     bool isAttacking() const {
         AnimationState current = animations.getCurrentState();
-       /* int currentFrame = animations.getCurrentFrameIndex();
-        if (current == AnimationState::Attack1 && currentFrame >= 0 && currentFrame <= 6 ||
-            current == AnimationState::Attack2 && currentFrame >= 0 && currentFrame <= 6 ||
-            current == AnimationState::Attack3 && currentFrame >= 0 && currentFrame <= 6) {
-            return true;
-        }
-        else return false;*/
-    
+        /* int currentFrame = animations.getCurrentFrameIndex();
+         if (current == AnimationState::Attack1 && currentFrame >= 0 && currentFrame <= 6 ||
+             current == AnimationState::Attack2 && currentFrame >= 0 && currentFrame <= 6 ||
+             current == AnimationState::Attack3 && currentFrame >= 0 && currentFrame <= 6) {
+             return true;
+         }
+         else return false;*/
+
         return current == AnimationState::Attack1 ||
             current == AnimationState::Attack2 ||
             current == AnimationState::Attack3;
@@ -618,7 +618,7 @@ private:
     sf::Vector2f velocity = { 0.f, 0.f };
     bool facingRight = true;
     bool isGrounded = true;
-    const float LEFT_BOUNDARY = 1.0f;   
+    const float LEFT_BOUNDARY = 1.0f;
     //input health from constructor
     int maxHealth;
     int currentHealth;
@@ -652,7 +652,7 @@ private:
     float parrySuccessWindow = 0.0f;
 
     //constructor changeable variables
-	float parrySuccessDuration;
+    float parrySuccessDuration;
     int attackDamage;
     float defensePercent;
     bool enableShoot;
@@ -689,7 +689,7 @@ private:
             proposedPosition.y = groundLevel;
             if (velocity.y > 0) { // Only stop downward velocity and set grounded if falling onto ground
                 velocity.y = 0;
-                isGrounded = true;                
+                isGrounded = true;
                 // Reset dash on landing if cooldown is over
                 if (dashCooldownTimer <= 0) {
                     canDash = true;
@@ -706,13 +706,13 @@ private:
 
 
         const float LEFT_BOUNDARY = 25.0f;  // Hardcoded left limit
-		const float RIGHT_BOUNDARY = 1060.0f; // Hardcoded right limit
+        const float RIGHT_BOUNDARY = 1060.0f; // Hardcoded right limit
         // Left boundary check
         if (proposedPosition.x < LEFT_BOUNDARY) {
             proposedPosition.x = LEFT_BOUNDARY;  // Snap to boundary
             if (velocity.x < 0) velocity.x = 0;  // Stop leftward movement
         }
-		if (proposedPosition.x > RIGHT_BOUNDARY) { // Right boundary check (by boss)
+        if (proposedPosition.x > RIGHT_BOUNDARY) { // Right boundary check (by boss)
             proposedPosition.x = RIGHT_BOUNDARY;
             if (velocity.x > 0) velocity.x = 0;
         }
@@ -851,7 +851,7 @@ private:
             shootTimer -= dt;
             if (shootTimer <= 0) {
                 shootTimer = 0;
-				canShoot = true && enableShoot;
+                canShoot = true && enableShoot;
             }
         }
     }
@@ -873,7 +873,7 @@ public:
         animations.getSprite().setScale(-1.f, 1.f);
 
         // Initialize RNG distributions
-		actionChoiceDistribution = std::uniform_int_distribution<int>(0, 2); // For 3 attack types (0, 1, 2)
+        actionChoiceDistribution = std::uniform_int_distribution<int>(0, 2); // For 3 attack types (0, 1, 2)
         groundAttackIntervalDistribution = std::uniform_real_distribution<float>(groundAttackIntervalMin, groundAttackIntervalMax);
         groundAttackTimer = groundAttackIntervalDistribution(rng);
 
@@ -916,7 +916,7 @@ public:
             groundAttackTimer -= dt;
             if (groundAttackTimer <= 0.f) {
                 triggerGroundProjectile = true; // Signal BossGame to spawn
-                SoundManager::instance().play("ground_attack",25);
+                SoundManager::instance().play("ground_attack", 25);
                 groundAttackTimer = groundAttackIntervalDistribution(rng); // Reset timer
             }
         }
@@ -989,10 +989,10 @@ public:
     }
 
     sf::FloatRect getAttackHitbox() const {
-        
+
         float width = ATTACK_HITBOX.x;
         return sf::FloatRect(
-            position.x + -90 - width / 2, 
+            position.x + -90 - width / 2,
             position.y - NORMAL_HITBOX.y / 2 + 30,
             width,
             NORMAL_HITBOX.y
@@ -1010,21 +1010,21 @@ public:
         float xPosition = position.x;
         if (isAttacking) {
             // Center of attack hitbox extends 
-            xPosition += (-NORMAL_HITBOX.x / 2 );
+            xPosition += (-NORMAL_HITBOX.x / 2);
         }
 
         return sf::FloatRect(
             xPosition - width / 2,
-			position.y - height / 2 + 30, // Adjusted since boss height is higher
+            position.y - height / 2 + 30, // Adjusted since boss height is higher
             width,
             height
         );
     }
 
-    sf::Vector2f getPosition() const {return animations.getSprite().getPosition();}
-    bool isAlive() const {return currentState != BossState::Dead;}
-    bool isAttackActive() const {return attackActive;}
-    bool isMeleeAttackActive() const {return attackActive;}
+    sf::Vector2f getPosition() const { return animations.getSprite().getPosition(); }
+    bool isAlive() const { return currentState != BossState::Dead; }
+    bool isAttackActive() const { return attackActive; }
+    bool isMeleeAttackActive() const { return attackActive; }
     int getHealth() const { return currentHealth; }
     int getMaxHealth() const { return maxHealth; }
     bool wantsToShootGround() const { return triggerGroundProjectile; }
@@ -1054,7 +1054,7 @@ private:
     float ultimateCooldown = 8.0f;
     const sf::Vector2f NORMAL_HITBOX = { 150.f, 200.f };
     const sf::Vector2f ATTACK_HITBOX = { 220.f, 200.f }; // Wider hitbox for attacks
-  
+
     //Tracker variables
     float timeSinceLastAction = 0.f;
     float currentAttackCooldown1 = 0.f;
@@ -1107,11 +1107,11 @@ private:
                 break;
             case BossState::Attacking1:
                 animations.play(AnimationState::BossAttack1);
-                SoundManager::instance().play("boss_attack",70);
+                SoundManager::instance().play("boss_attack", 70);
                 break;
             case BossState::Attacking2:
                 animations.play(AnimationState::BossAttack2);
-				SoundManager::instance().play("boss_attack",70);
+                SoundManager::instance().play("boss_attack", 70);
                 break;
             case BossState::Attacking3:
                 animations.play(AnimationState::BossAttack3);
@@ -1130,8 +1130,8 @@ private:
     }
 
     void startActionDelay() {
-        std::uniform_real_distribution<float> delayVar(0.8f, 1.3f); 
-		currentActionDelay = 1.8f * delayVar(rng);// Randomize delay between 0.8 and 1.3 seconds
+        std::uniform_real_distribution<float> delayVar(0.8f, 1.3f);
+        currentActionDelay = 1.8f * delayVar(rng);// Randomize delay between 0.8 and 1.3 seconds
         timeSinceLastAction = 0.f;
     }
 
@@ -1147,7 +1147,7 @@ private:
         // Try the chosen action if cooldown allows, otherwise default to delaying again
         if (action == 0 && currentAttackCooldown1 <= 0.f) performAttack1();
         else if (action == 1 && currentAttackCooldown2 <= 0.f) performAttack2();
-        else if (action == 2 && currentAttackCooldown3 <= 0.f) performAttack3(); 
+        else if (action == 2 && currentAttackCooldown3 <= 0.f) performAttack3();
         else {
             // If chosen action is on cooldown, or invalid, just wait again
             setState(BossState::Idle); // Ensure idle state
@@ -1251,25 +1251,26 @@ public:
             10,      // baseAttackDamage
             0.f,     // defensePercent
             true     // enableShoot
-		),
+        ),
         boss({ 1100.f, 385.f }, & player, 600.f, 1250.f, 600),
-        gameRng(rd())
+        gameRng(rd()), gameClock(), timerText()
     {
         auto& sm = SoundManager::instance();
         sm.load("background", "../assets/sounds/Bossbackground.ogg");
-		sm.load("player_shoot", "../assets/sounds/player_shoot.ogg");
-		sm.load("player_damaged", "../assets/sounds/player_damaged.ogg");
-		sm.load("player_jump", "../assets/sounds/player_jump.ogg");
+        sm.load("player_shoot", "../assets/sounds/player_shoot.ogg");
+        sm.load("player_damaged", "../assets/sounds/player_damaged.ogg");
+        sm.load("player_jump", "../assets/sounds/player_jump.ogg");
         sm.load("player_parry", "../assets/sounds/player_parry.ogg");
-		sm.load("player_attack", "../assets/sounds/player_attack.ogg");
-		sm.load("player_run", "../assets/sounds/player_run.ogg");
-		sm.load("ground_attack", "../assets/sounds/ground_attack.ogg");
-		sm.load("fire_spray", "../assets/sounds/fire_spray.ogg");
-		sm.load("boss_attack", "../assets/sounds/boss_attack.ogg");
+        sm.load("player_attack", "../assets/sounds/player_attack.ogg");
+        sm.load("player_run", "../assets/sounds/player_run.ogg");
+        sm.load("ground_attack", "../assets/sounds/ground_attack.ogg");
+        sm.load("fire_spray", "../assets/sounds/fire_spray.ogg");
+        sm.load("boss_attack", "../assets/sounds/boss_attack.ogg");
 
 
-        SoundManager::instance().play("background",10);
-		SoundManager::instance().setLoop("background", true);
+        SoundManager::instance().play("background", 10);
+        SoundManager::instance().setLoop("background", true);
+
         window.setFramerateLimit(60);
         window.setVerticalSyncEnabled(true);
         initBackground();
@@ -1300,7 +1301,7 @@ private:
     std::mt19937 gameRng;
     bool showDebugBoxes = false;
 
-	// UI elements
+    // UI elements
     sf::RectangleShape playerHealthBarBackground;
     sf::RectangleShape playerHealthBarFill;
     const float HEALTH_BAR_WIDTH = 300.f;
@@ -1308,6 +1309,8 @@ private:
     const float HEALTH_BAR_PADDING = 10.f;
     const float HEALTH_BAR_POS_X = 25.f;
     const float HEALTH_BAR_POS_Y = 25.f;
+    sf::Clock gameClock; // play time
+    sf::Text timerText;
 
     sf::RectangleShape bossHealthBarBackground;
     sf::RectangleShape bossHealthBarFill;
@@ -1360,7 +1363,7 @@ private:
         if (!font.loadFromFile("../assets/arial.ttf")) {
             std::cerr << "Failed to load font!" << std::endl;
         }
-
+        // Tutorial messages
         std::vector<std::pair<std::string, float>> messageConfig = {
         {"Move with A/D Space", 4.5f},
         {"Attack E,F,left click", 5.0f},
@@ -1388,7 +1391,22 @@ private:
             tutorialMessages.push_back(tutorial);
             verticalPosition += 50.f;
         }
-    
+
+        //Timer text
+        timerText.setFont(font);
+        timerText.setCharacterSize(35);
+        timerText.setFillColor(sf::Color::White);
+        timerText.setOutlineColor(sf::Color::Black);
+        timerText.setOutlineThickness(1.8);
+        // initial placeholder:
+        timerText.setString("00:00");
+
+        // center it at the top:
+        auto bounds = timerText.getLocalBounds();
+        timerText.setOrigin(bounds.width / 2, bounds.height / 2);
+        timerText.setPosition(window.getSize().x / 2, 100);
+
+
         // Player health text
         playerHealthText.setFont(font);
         playerHealthText.setCharacterSize(20);
@@ -1461,8 +1479,8 @@ private:
                     case sf::Keyboard::Q:     player.parry(); break;
                     case sf::Keyboard::F:     player.shoot(); break;
                         // Debug keys 
-					case sf::Keyboard::T: player.takeDamage(10); break;  // player damage
-					case sf::Keyboard::N: player.death(); break;         // Force player death
+                    case sf::Keyboard::T: player.takeDamage(10); break;  // player damage
+                    case sf::Keyboard::N: player.death(); break;         // Force player death
                         // Boss Debug Keys
                     case sf::Keyboard::Y: boss.takeDamage(100); break;   // Boss take damage
                     case sf::Keyboard::M: boss.death(); break;           // Force boss death
@@ -1479,7 +1497,7 @@ private:
 
             // Handle mouse button presses for actions (only if player alive)
             if (player.isAlive() && event.type == sf::Event::MouseButtonPressed) {
-                if (event.mouseButton.button == sf::Mouse::Left) {                    
+                if (event.mouseButton.button == sf::Mouse::Left) {
                     player.attack();
                 }
                 else if (event.mouseButton.button == sf::Mouse::Right) {
@@ -1616,7 +1634,7 @@ private:
         }
 
         sf::Vector2f startPos = player.getPosition();
-		startPos.x += 50; // Offset to the right of the player
+        startPos.x += 50; // Offset to the right of the player
 
         float projectileSpeed = 800.f;
         sf::Vector2f velocity;
@@ -1648,7 +1666,21 @@ private:
         player.update(dt);
         boss.update(dt);
 
+        // Update timers
+        if (player.isAlive() && boss.isAlive()) {
+        sf::Time elapsed = gameClock.getElapsedTime();
+        int totalSeconds = static_cast<int>(elapsed.asSeconds());
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
 
+        // format mm:ss
+        char buf[6];
+        std::snprintf(buf, sizeof(buf), "%02d:%02d", minutes, seconds);
+        timerText.setString(buf);
+        timerText.setPosition(window.getSize().x / 2, 30);
+        }
+
+        //display tutorial message
         for (auto& msg : tutorialMessages) {
             if (msg.active) {
                 msg.timer -= dt;
@@ -1671,7 +1703,7 @@ private:
         // Boss Ground Projectile
         if (boss.wantsToShootGround()) {
             sf::Vector2f startPos = boss.getPosition();
-			startPos.x += 160.f; // start position to the right of the boss for player reaction
+            startPos.x += 160.f; // start position to the right of the boss for player reaction
             startPos.y += 130; // Y position for ground level
             sf::Vector2f velocity = { -400.f, 0.f }; // Always shoots left
 
@@ -1692,7 +1724,7 @@ private:
         // Boss Rain Projectile (Ultimate)
         if (boss.wantsToShootRain()) {
             // Spawn at random X position above the screen
-            std::uniform_real_distribution<float> rainXDist(0.f, (float)window.getSize().x-200);
+            std::uniform_real_distribution<float> rainXDist(0.f, (float)window.getSize().x - 200);
             sf::Vector2f startPos = { rainXDist(gameRng), -100.f }; // Start above screen
             sf::Vector2f velocity = { 0.f, 600.f }; // Straight down
             spawnBossProjectile("boss_projectile_rain", startPos, velocity, 12);
@@ -1734,12 +1766,14 @@ private:
         }
         player.draw(window);
         boss.draw(window);
-        // Draw debug boxes if enabled
+
+        window.draw(timerText); // Draw timer text
 
         for (const auto& proj : projectiles) {
             proj.draw(window);
         }
 
+        // Draw debug boxes if enabled
         if (showDebugBoxes) {
             sf::RectangleShape playerBox(sf::Vector2f(getPlayerHitbox().width, getPlayerHitbox().height));
             playerBox.setPosition(getPlayerHitbox().left, getPlayerHitbox().top);
@@ -1758,7 +1792,7 @@ private:
 
             sf::FloatRect attackBox = boss.getAttackHitbox();
             sf::RectangleShape attackRect(sf::Vector2f(attackBox.width, attackBox.height));
-            attackRect.setPosition(attackBox.left+15, attackBox.top);
+            attackRect.setPosition(attackBox.left + 15, attackBox.top);
             attackRect.setFillColor(sf::Color::Transparent);
             attackRect.setOutlineColor(sf::Color::Magenta);
             attackRect.setOutlineThickness(2.f);
