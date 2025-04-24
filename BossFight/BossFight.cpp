@@ -1214,10 +1214,10 @@ private:
         triggerMidProjectile = false;
         triggerRainProjectile = false;
 
-        if (animState == AnimationState::BossAttack1 && currentFrame >= 5 && currentFrame <= 6) {
+        if (animState == AnimationState::BossAttack1 && currentFrame >= 4 && currentFrame <= 6) {
             attackActive = true;
         }
-        else if (animState == AnimationState::BossAttack2 && currentFrame >= 6 && currentFrame <= 7) {
+        else if (animState == AnimationState::BossAttack2 && currentFrame >= 5 && currentFrame <= 7) {
             attackActive = true;
         }
         if (animState == AnimationState::BossAttack3 && currentFrame == 1) {
@@ -1289,7 +1289,8 @@ public:
             render();
         }
     }
-
+    //public final time 
+    sf::Time finalTime;
 private:
     sf::RenderWindow window;
     sf::View gameView = window.getDefaultView();;
@@ -1310,7 +1311,7 @@ private:
     const float HEALTH_BAR_POS_X = 25.f;
     const float HEALTH_BAR_POS_Y = 25.f;
     sf::Clock gameClock; // play time
-    sf::Text timerText;
+    sf::Text timerText;   
 
     sf::RectangleShape bossHealthBarBackground;
     sf::RectangleShape bossHealthBarFill;
@@ -1365,10 +1366,11 @@ private:
         }
         // Tutorial messages
         std::vector<std::pair<std::string, float>> messageConfig = {
-        {"Move with A/D Space", 4.5f},
-        {"Attack E,F,left click", 5.0f},
-        {"Dash with SHIFT", 5.5f},
-        {"Parry with Q or right click", 6.f}
+        {"Move with A/D Space", 4.5},
+        {"Attack E,left click", 5.0},
+		{"Shoot with F", 5.5},
+        {"Dash with SHIFT", 6.},
+        {"Parry with Q or right click", 6.5}
         };
         float verticalPosition = 150.f;
         for (auto& [msg, duration] : messageConfig) {
@@ -1378,7 +1380,7 @@ private:
             tutorial.text.setCharacterSize(30);
             tutorial.text.setFillColor(sf::Color::White);
             tutorial.text.setOutlineColor(sf::Color::Black);
-            tutorial.text.setOutlineThickness(2.f);
+            tutorial.text.setOutlineThickness(1.8);
 
             sf::FloatRect bounds = tutorial.text.getLocalBounds();
             tutorial.text.setOrigin(bounds.width / 2, bounds.height / 2);
@@ -1677,8 +1679,9 @@ private:
         char buf[6];
         std::snprintf(buf, sizeof(buf), "%02d:%02d", minutes, seconds);
         timerText.setString(buf);
-        timerText.setPosition(window.getSize().x / 2, 30);
-        }
+		timerText.setPosition(window.getSize().x / 2, 30);
+        finalTime = gameClock.getElapsedTime();
+		}
 
         //display tutorial message
         for (auto& msg : tutorialMessages) {
@@ -1834,5 +1837,6 @@ private:
 int main() {
     BossGame game;
     game.run();
+	std::cout<<game.finalTime.asSeconds();
     return 0;
 }
