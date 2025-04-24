@@ -1443,12 +1443,11 @@ private:
                     case sf::Keyboard::Q:     player.parry(); break;
                     case sf::Keyboard::F:     player.shoot(); break;
                         // Debug keys 
-                    case sf::Keyboard::T: player.takeDamage(10); break;  // player damage
-                    case sf::Keyboard::N: player.death(); break;         // Force player death
-                        // Boss Debug Keys
-                    case sf::Keyboard::Y: boss.takeDamage(100); break;   // Boss take damage
-                    case sf::Keyboard::M: boss.death(); break;           // Force boss death
-                    case sf::Keyboard::F1: showDebugBoxes = !showDebugBoxes; break; //debug hitboxes
+                    //case sf::Keyboard::T: player.takeDamage(10); break;  // player damage
+                    //case sf::Keyboard::N: player.death(); break;         // Force player death
+                    //case sf::Keyboard::Y: boss.takeDamage(100); break;   // Boss take damage
+                    //case sf::Keyboard::M: boss.death(); break;           // Force boss death
+                    //case sf::Keyboard::F1: showDebugBoxes = !showDebugBoxes; break; //debug hitboxes
 
                     default: break; // Ignore other keys for single press actions
                     }
@@ -1760,7 +1759,7 @@ private:
         }
 
         // Draw debug boxes if enabled
-        if (showDebugBoxes) {
+       /* if (showDebugBoxes) {
             sf::RectangleShape playerBox(sf::Vector2f(getPlayerHitbox().width, getPlayerHitbox().height));
             playerBox.setPosition(getPlayerHitbox().left, getPlayerHitbox().top);
             playerBox.setFillColor(sf::Color::Transparent);
@@ -1795,7 +1794,7 @@ private:
                     window.draw(projBox);
                 }
             }
-        }
+        }*/
 
         // Draw UI elements using the default view (screen coordinates)
         window.setView(window.getDefaultView()); // Switch to default view for UI
