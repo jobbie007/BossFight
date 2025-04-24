@@ -72,7 +72,7 @@ public:
         sf::SoundBuffer* buffer = get(id);
         if (!buffer) {
             std::cerr << "[SoundManager] Cannot play sound: Buffer '" << id << "' not found." << std::endl;
-            return; // Exit if buffer wasn't found
+            return;
         }
 
         // --- Sound Instance Management ---
@@ -91,23 +91,23 @@ public:
         sounds.back().play();
     }
 
-    // Optional: Function to stop all currently playing sounds
-    void stopAllSounds() {
-        for (sf::Sound& sound : sounds) {
-            sound.stop();
+    void setLoop(const std::string& id, bool loop) {
+        auto it = soundBuffers.find(id);
+        if (it != soundBuffers.end()) {
+            // Create a temporary sf::Sound instance to configure looping  
+            sf::Sound tempSound(it->second);
+            tempSound.setLoop(loop);
+            std::cout << "[SoundManager] Set loop for sound: " << id << " to " << (loop ? "true" : "false") << std::endl;
         }
-        sounds.clear(); // Clear the list as all sounds are stopped
+        else {
+            std::cerr << "[SoundManager] Error: Sound buffer not found: " << id << std::endl;
+        }
     }
 
 private:
-    // Private constructor for Singleton pattern
     SoundManager() = default;
     // Private destructor (ensures deletion only through static instance lifecycle)
     ~SoundManager() = default;
-
-    // Delete copy constructor and assignment operator to prevent copies
-    SoundManager(const SoundManager&) = delete;
-    SoundManager& operator=(const SoundManager&) = delete;
 
     // Map to store the loaded sound buffers directly
     std::map<std::string, sf::SoundBuffer> soundBuffers;
@@ -120,7 +120,7 @@ private:
 // --- Music Player Class ---
 class MusicPlayer {
 public:
-    MusicPlayer() : music(), volume(50.f) {} // Default volume
+    MusicPlayer() : music(), volume(30.f) {} // Default volume
 
     // Open music file for streaming
     bool open(const std::string& filename) {
@@ -1254,6 +1254,12 @@ public:
         boss({ 1100.f, 385.f }, & player, 600.f, 1250.f, 600),
         gameRng(rd())
     {
+        auto& sm = SoundManager::instance();
+        sm.load("background", "../assets/sounds/Bossbackground.ogg");
+		sm.load("player_shoot", "../assets/sounds/player_shoot.ogg");
+
+        SoundManager::instance().play("background");
+		SoundManager::instance().setLoop("background", true);
         window.setFramerateLimit(60);
         window.setVerticalSyncEnabled(true);
         initBackground();
@@ -1463,7 +1469,7 @@ private:
 
             // Handle mouse button presses for actions (only if player alive)
             if (player.isAlive() && event.type == sf::Event::MouseButtonPressed) {
-                if (event.mouseButton.button == sf::Mouse::Left) {
+                if (event.mouseButton.button == sf::Mouse::Left) {                    
                     player.attack();
                 }
                 else if (event.mouseButton.button == sf::Mouse::Right) {
