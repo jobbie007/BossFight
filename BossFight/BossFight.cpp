@@ -1,4 +1,5 @@
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include <iostream>
 #include <vector>
 #include <map>
@@ -31,6 +32,138 @@ public://allows one local TextureManager globally
             return &it->second;
         return nullptr;
     }
+};
+
+// --- Sound Manager ---
+class SoundManager {
+public:
+    // Static instance method for Singleton pattern
+    static SoundManager& instance() {
+        static SoundManager manager; // Instantiated on first call
+        return manager;
+    }
+
+    // Load a sound buffer from file and store it directly in the map
+    bool load(const std::string& id, const std::string& filename) {
+        sf::SoundBuffer buffer; // Create buffer on the stack first
+        if (!buffer.loadFromFile(filename)) {
+            std::cerr << "[SoundManager] Error loading sound: " << filename << std::endl;
+            return false;
+        }
+        // Move the loaded buffer into the map
+        soundBuffers.emplace(id, std::move(buffer));
+        std::cout << "[SoundManager] Loaded sound: " << filename << " as '" << id << "'" << std::endl;
+        return true;
+    }
+
+    // Get a pointer to a sound buffer by ID
+    sf::SoundBuffer* get(const std::string& id) {
+        auto it = soundBuffers.find(id);
+        if (it != soundBuffers.end()) {
+            // Return the address of the SoundBuffer stored in the map
+            return &it->second;
+        }
+        std::cerr << "[SoundManager] Error: Sound buffer not found: " << id << std::endl;
+        return nullptr;
+    }
+
+    // Play a sound by ID using a managed sf::Sound instance
+    void play(const std::string& id, float volume = 20.f) {
+        sf::SoundBuffer* buffer = get(id);
+        if (!buffer) {
+            std::cerr << "[SoundManager] Cannot play sound: Buffer '" << id << "' not found." << std::endl;
+            return; // Exit if buffer wasn't found
+        }
+
+        // --- Sound Instance Management ---
+        // 1. Clean up sounds that have finished playing to reuse resources.
+        //    Iterate and remove sounds whose status is Stopped.
+        sounds.remove_if([](const sf::Sound& s) {
+            return s.getStatus() == sf::Sound::Stopped;
+            });
+
+        // 2. Create a new sound instance in the list.
+        //    emplace_back constructs the sf::Sound directly in the list.
+        sounds.emplace_back(*buffer); // Pass the found buffer to the constructor
+
+        // 3. Configure and play the newly added sound (it's always at the back).
+        sounds.back().setVolume(std::clamp(volume, 0.f, 100.f)); // Ensure volume is valid
+        sounds.back().play();
+    }
+
+    // Optional: Function to stop all currently playing sounds
+    void stopAllSounds() {
+        for (sf::Sound& sound : sounds) {
+            sound.stop();
+        }
+        sounds.clear(); // Clear the list as all sounds are stopped
+    }
+
+private:
+    // Private constructor for Singleton pattern
+    SoundManager() = default;
+    // Private destructor (ensures deletion only through static instance lifecycle)
+    ~SoundManager() = default;
+
+    // Delete copy constructor and assignment operator to prevent copies
+    SoundManager(const SoundManager&) = delete;
+    SoundManager& operator=(const SoundManager&) = delete;
+
+    // Map to store the loaded sound buffers directly
+    std::map<std::string, sf::SoundBuffer> soundBuffers;
+
+    // List to manage currently active/playing sound instances (sf::Sound)
+    // This is necessary because sf::SoundBuffer only holds data, sf::Sound plays it.
+    std::list<sf::Sound> sounds;
+};
+
+// --- Music Player Class ---
+class MusicPlayer {
+public:
+    MusicPlayer() : music(), volume(50.f) {} // Default volume
+
+    // Open music file for streaming
+    bool open(const std::string& filename) {
+        if (!music.openFromFile(filename)) {
+            std::cerr << "[MusicPlayer] Error opening music: " << filename << std::endl;
+            return false;
+        }
+        music.setVolume(volume); // Apply the current volume setting
+        music.setLoop(true);     // Usually background music loops
+        return true;
+    }
+
+    // Start playing the loaded music
+    void play() {
+        if (music.getStatus() != sf::SoundSource::Playing) {
+            music.play();
+        }
+    }
+
+    // Stop the music
+    void stop() {
+        music.stop();
+    }
+
+    // Pause the music
+    void pause() {
+        music.pause();
+    }
+
+    // Set the volume (0-100)
+    void setVolume(float vol) {
+        volume = std::clamp(vol, 0.f, 100.f); // Ensure volume is within valid range
+        music.setVolume(volume);
+    }
+
+    // Check if music is currently playing
+    bool isPlaying() const {
+        return music.getStatus() == sf::SoundSource::Playing;
+    }
+
+private:
+    sf::Music music; // The music stream object
+    float volume;    // Current volume level
 };
 
 // --- Animation State Enum ---
@@ -464,9 +597,18 @@ public:
     // Added helper for collision detection logic
     bool isAttacking() const {
         AnimationState current = animations.getCurrentState();
+       /* int currentFrame = animations.getCurrentFrameIndex();
+        if (current == AnimationState::Attack1 && currentFrame >= 0 && currentFrame <= 6 ||
+            current == AnimationState::Attack2 && currentFrame >= 0 && currentFrame <= 6 ||
+            current == AnimationState::Attack3 && currentFrame >= 0 && currentFrame <= 6) {
+            return true;
+        }
+        else return false;*/
+    
         return current == AnimationState::Attack1 ||
             current == AnimationState::Attack2 ||
             current == AnimationState::Attack3;
+
     }
 
     bool isParryProtected() const {
@@ -551,7 +693,7 @@ private:
             proposedPosition.y = groundLevel;
             if (velocity.y > 0) { // Only stop downward velocity and set grounded if falling onto ground
                 velocity.y = 0;
-                isGrounded = true;
+                isGrounded = true;                
                 // Reset dash on landing if cooldown is over
                 if (dashCooldownTimer <= 0) {
                     canDash = true;
@@ -1105,7 +1247,7 @@ public:
             100,     // currentHealth
             true,    // enableDash
             0.8f,    // parrySuccessTime
-            15,      // baseAttackDamage
+            10,      // baseAttackDamage
             0.f,     // defensePercent
             true     // enableShoot
 		),
@@ -1348,7 +1490,7 @@ private:
             sf::FloatRect playerAttackBounds = player.getGlobalBounds();
 
             if (playerAttackBounds.intersects(boss.getGlobalBounds())) {
-                boss.takeDamage(20);
+                boss.takeDamage(player.getAttackDamage());
             }
         }
 
