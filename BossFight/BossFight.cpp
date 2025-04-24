@@ -116,55 +116,6 @@ private:
     std::list<sf::Sound> sounds;
 };
 
-// --- Music Player Class ---
-class MusicPlayer {
-public:
-    MusicPlayer() : music(), volume(30.f) {} // Default volume
-
-    // Open music file for streaming
-    bool open(const std::string& filename) {
-        if (!music.openFromFile(filename)) {
-            std::cerr << "[MusicPlayer] Error opening music: " << filename << std::endl;
-            return false;
-        }
-        music.setVolume(volume); // Apply the current volume setting
-        music.setLoop(true);     // Usually background music loops
-        return true;
-    }
-
-    // Start playing the loaded music
-    void play() {
-        if (music.getStatus() != sf::SoundSource::Playing) {
-            music.play();
-        }
-    }
-
-    // Stop the music
-    void stop() {
-        music.stop();
-    }
-
-    // Pause the music
-    void pause() {
-        music.pause();
-    }
-
-    // Set the volume (0-100)
-    void setVolume(float vol) {
-        volume = std::clamp(vol, 0.f, 100.f); // Ensure volume is within valid range
-        music.setVolume(volume);
-    }
-
-    // Check if music is currently playing
-    bool isPlaying() const {
-        return music.getStatus() == sf::SoundSource::Playing;
-    }
-
-private:
-    sf::Music music; // The music stream object
-    float volume;    // Current volume level
-};
-
 // --- Animation State Enum ---
 enum class AnimationState {
     // Player States
@@ -1247,8 +1198,8 @@ public:
             100,     // maxHealth
             100,     // currentHealth
             true,    // enableDash
-            0.8f,    // parrySuccessTime
-            10,      // baseAttackDamage
+            0.75f,    // parrySuccessTime
+            15,      // baseAttackDamage
             0.f,     // defensePercent
             true     // enableShoot
         ),
@@ -1262,11 +1213,9 @@ public:
         sm.load("player_jump", "../assets/sounds/player_jump.ogg");
         sm.load("player_parry", "../assets/sounds/player_parry.ogg");
         sm.load("player_attack", "../assets/sounds/player_attack.ogg");
-        sm.load("player_run", "../assets/sounds/player_run.ogg");
         sm.load("ground_attack", "../assets/sounds/ground_attack.ogg");
         sm.load("fire_spray", "../assets/sounds/fire_spray.ogg");
         sm.load("boss_attack", "../assets/sounds/boss_attack.ogg");
-
 
         SoundManager::instance().play("background", 10);
         SoundManager::instance().setLoop("background", true);
@@ -1281,14 +1230,15 @@ public:
         sf::Clock clock;
         while (window.isOpen()) {
             float dt = clock.restart().asSeconds();
-            // Clamp delta time to prevent large jumps if debugging/stalling
+            //helps prevent time skips/lag (should update at 60fps 0.01667s)
             if (dt > 0.1f) dt = 0.1f;
-
             processInput();
             update(dt);
             render();
         }
     }
+
+    bool playerWin() { return player.isAlive() && !boss.isAlive(); }
     //public final time 
     sf::Time finalTime;
 private:
@@ -1311,7 +1261,9 @@ private:
     const float HEALTH_BAR_POS_X = 25.f;
     const float HEALTH_BAR_POS_Y = 25.f;
     sf::Clock gameClock; // play time
-    sf::Text timerText;   
+    sf::Text timerText;
+    sf::Time endScreen = sf::seconds(3);
+    sf::Text endGameText;
 
     sf::RectangleShape bossHealthBarBackground;
     sf::RectangleShape bossHealthBarFill;
@@ -1368,10 +1320,11 @@ private:
         std::vector<std::pair<std::string, float>> messageConfig = {
         {"Move with A/D Space", 4.5},
         {"Attack E,left click", 5.0},
-		{"Shoot with F", 5.5},
+        {"Shoot with F", 5.5},
         {"Dash with SHIFT", 6.},
         {"Parry with Q or right click", 6.5}
         };
+
         float verticalPosition = 150.f;
         for (auto& [msg, duration] : messageConfig) {
             TutorialMessage tutorial;
@@ -1408,6 +1361,15 @@ private:
         timerText.setOrigin(bounds.width / 2, bounds.height / 2);
         timerText.setPosition(window.getSize().x / 2, 100);
 
+        // Endgame text (hidden until game over)
+        endGameText.setFont(font);
+        endGameText.setCharacterSize(150);
+        endGameText.setFillColor(sf::Color::Black);
+        endGameText.setOutlineColor(sf::Color::White);
+        endGameText.setOutlineThickness(2.f);
+        endGameText.setString(""); // start empty
+        //offset since ground is high
+        endGameText.setPosition(window.getSize().x / 2, window.getSize().y / 2 - 110);
 
         // Player health text
         playerHealthText.setFont(font);
@@ -1668,21 +1630,6 @@ private:
         player.update(dt);
         boss.update(dt);
 
-        // Update timers
-        if (player.isAlive() && boss.isAlive()) {
-        sf::Time elapsed = gameClock.getElapsedTime();
-        int totalSeconds = static_cast<int>(elapsed.asSeconds());
-        int minutes = totalSeconds / 60;
-        int seconds = totalSeconds % 60;
-
-        // format mm:ss
-        char buf[6];
-        std::snprintf(buf, sizeof(buf), "%02d:%02d", minutes, seconds);
-        timerText.setString(buf);
-		timerText.setPosition(window.getSize().x / 2, 30);
-        finalTime = gameClock.getElapsedTime();
-		}
-
         //display tutorial message
         for (auto& msg : tutorialMessages) {
             if (msg.active) {
@@ -1754,7 +1701,38 @@ private:
             }
         }
 
+        // Update timers
+        if (player.isAlive() && boss.isAlive()) {
+            sf::Time elapsed = gameClock.getElapsedTime();
+            int totalSeconds = static_cast<int>(elapsed.asSeconds());
+            int minutes = totalSeconds / 60;
+            int seconds = totalSeconds % 60;
 
+            // format mm:ss
+            char buf[6];
+            std::snprintf(buf, sizeof(buf), "%02d:%02d", minutes, seconds);
+            timerText.setString(buf);
+            timerText.setPosition(window.getSize().x / 2, 30);
+            finalTime = gameClock.getElapsedTime();
+        }
+        else {
+            if (endScreen.asSeconds() > 0) {
+                endScreen -= sf::seconds(dt);
+                if (playerWin()) {
+                    auto bb = endGameText.getLocalBounds();
+                    endGameText.setOrigin(bb.width / 2, bb.height / 2);
+                    endGameText.setString("You Win!");
+                }
+                else {
+                    auto bb = endGameText.getLocalBounds();
+                    endGameText.setOrigin(bb.width / 2, bb.height / 2);
+                    endGameText.setString("You Lose!");
+                }
+                return;
+            }
+            else { window.close(); }
+        }
+        //no collisions checks if either boss or player is dead (prevents draws)
         handleCollisions(); // collision checks
         updateUI(); // Update health bars for both
     }
@@ -1771,6 +1749,11 @@ private:
         boss.draw(window);
 
         window.draw(timerText); // Draw timer text
+
+        // Draw end game text
+        if (!endGameText.getString().isEmpty()) {
+            window.draw(endGameText);
+        }
 
         for (const auto& proj : projectiles) {
             proj.draw(window);
@@ -1837,6 +1820,19 @@ private:
 int main() {
     BossGame game;
     game.run();
-	std::cout<<game.finalTime.asSeconds();
+    if (game.playerWin()) {
+        std::cout << "You win!" << std::endl;
+    }
+    else {
+        std::cout << "You lose!" << std::endl;
+    }
+    // Print final time
+    std::cout << "Final Time: ";
+    // Format the time as mm:ss
+    int totalSeconds = static_cast<int>(game.finalTime.asSeconds());
+    int minutes = totalSeconds / 60;
+    int seconds = totalSeconds % 60;
+    std::cout << (minutes < 10 ? "0" : "") << minutes << ":" << (seconds < 10 ? "0" : "") << seconds << std::endl;
+    std::cout << game.finalTime.asSeconds();
     return 0;
 }
