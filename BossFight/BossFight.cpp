@@ -68,7 +68,7 @@ public:
     }
 
     // Play a sound by ID using a managed sf::Sound instance
-    void play(const std::string& id, float volume = 20.f) {
+    void play(const std::string& id, float volume = 15.f) {
         sf::SoundBuffer* buffer = get(id);
         if (!buffer) {
             std::cerr << "[SoundManager] Cannot play sound: Buffer '" << id << "' not found." << std::endl;
@@ -97,7 +97,6 @@ public:
             // Create a temporary sf::Sound instance to configure looping  
             sf::Sound tempSound(it->second);
             tempSound.setLoop(loop);
-            std::cout << "[SoundManager] Set loop for sound: " << id << " to " << (loop ? "true" : "false") << std::endl;
         }
         else {
             std::cerr << "[SoundManager] Error: Sound buffer not found: " << id << std::endl;
@@ -410,9 +409,6 @@ public:
                 );
             }
 
-
-
-
             // Check if hurt duration is over
             if (hurtTimer <= 0.f) {
                 isHurt = false;
@@ -450,7 +446,7 @@ public:
 
     void move(sf::Vector2f direction) {
         if (isHurt || !isAlive()) return; // Block input if hurt or dead
-
+       
         // Allow movement unless dashing or attacking/parrying on the ground
         if (dashTimer <= 0 && !(isGrounded && (isAttacking() || animations.getCurrentState() == AnimationState::Parry))) {
             if (direction.x != 0.f) {
@@ -467,7 +463,7 @@ public:
 
     void jump() {
         if (isHurt || !isAlive()) return;
-
+        SoundManager::instance().play("player_jump");
         if (isGrounded && !isAttacking() && dashTimer <= 0 && animations.getCurrentState() != AnimationState::Parry) {
             velocity.y = -jumpForce;
             isGrounded = false;
@@ -502,7 +498,7 @@ public:
 
     void parry() {
         if (isHurt || !isAlive()) return;
-
+        SoundManager::instance().play("player_parry");
         if (canParry && !isAttacking() && dashTimer <= 0) {
             animations.play(AnimationState::Parry);
             canParry = false;
@@ -520,7 +516,7 @@ public:
         if (canAttack && !isAttacking() && dashTimer <= 0 && animations.getCurrentState() != AnimationState::Parry) {
             int attackIndex = attackDistribution(rng); // Generate 0, 1, or 2
             AnimationState selectedAttackState = attackStates[attackIndex];
-
+            SoundManager::instance().play("player_attack");
             animations.play(selectedAttackState); // Play the chosen attack animation
             canAttack = false; // Prevent attacking again until cooldown finishes
             attackTimer = attackCooldown; // Start cooldown timer
@@ -534,7 +530,7 @@ public:
 
     void shoot() {
         if (isHurt || !isAlive() || !canShoot || isAttacking() || animations.getCurrentState() == AnimationState::Parry || dashTimer > 0 ||!enableShoot) return;
-
+        SoundManager::instance().play("player_shoot");
         canShoot = false;
         shootTimer = shootCooldown;
         animations.play(AnimationState::Shoot);
@@ -555,7 +551,7 @@ public:
         if (!isAlive() || animations.getCurrentState() == AnimationState::Dead || isHurt) {
             return;
         }
-
+        SoundManager::instance().play("player_damaged");
         int actualDamage = static_cast<int>(amount * (1 - defensePercent));
         currentHealth -= actualDamage;
         currentHealth = std::max(0, currentHealth);
@@ -920,6 +916,7 @@ public:
             groundAttackTimer -= dt;
             if (groundAttackTimer <= 0.f) {
                 triggerGroundProjectile = true; // Signal BossGame to spawn
+                SoundManager::instance().play("ground_attack",25);
                 groundAttackTimer = groundAttackIntervalDistribution(rng); // Reset timer
             }
         }
@@ -1110,15 +1107,19 @@ private:
                 break;
             case BossState::Attacking1:
                 animations.play(AnimationState::BossAttack1);
+                SoundManager::instance().play("boss_attack",70);
                 break;
             case BossState::Attacking2:
                 animations.play(AnimationState::BossAttack2);
+				SoundManager::instance().play("boss_attack",70);
                 break;
             case BossState::Attacking3:
                 animations.play(AnimationState::BossAttack3);
+                SoundManager::instance().play("fire_spray");
                 break;
             case BossState::Ultimate:
                 animations.play(AnimationState::BossUltimate);
+                SoundManager::instance().play("fire_spray");
                 rainSpawnTimer = 0.f; // Reset rain timer on entering ultimate
                 break;
             case BossState::Dead:
@@ -1257,8 +1258,17 @@ public:
         auto& sm = SoundManager::instance();
         sm.load("background", "../assets/sounds/Bossbackground.ogg");
 		sm.load("player_shoot", "../assets/sounds/player_shoot.ogg");
+		sm.load("player_damaged", "../assets/sounds/player_damaged.ogg");
+		sm.load("player_jump", "../assets/sounds/player_jump.ogg");
+        sm.load("player_parry", "../assets/sounds/player_parry.ogg");
+		sm.load("player_attack", "../assets/sounds/player_attack.ogg");
+		sm.load("player_run", "../assets/sounds/player_run.ogg");
+		sm.load("ground_attack", "../assets/sounds/ground_attack.ogg");
+		sm.load("fire_spray", "../assets/sounds/fire_spray.ogg");
+		sm.load("boss_attack", "../assets/sounds/boss_attack.ogg");
 
-        SoundManager::instance().play("background");
+
+        SoundManager::instance().play("background",10);
 		SoundManager::instance().setLoop("background", true);
         window.setFramerateLimit(60);
         window.setVerticalSyncEnabled(true);
@@ -1483,6 +1493,7 @@ private:
             sf::Vector2f movement(0.f, 0.f);
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) movement.x -= 1.f;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) movement.x += 1.f;
+
             player.move(movement); // Pass direction based on held keys
         }
     }
