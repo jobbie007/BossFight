@@ -314,6 +314,27 @@ public:
         attackStates = { AnimationState::Attack1, AnimationState::Attack2, AnimationState::Attack3 }; // Store attack states
     }
 
+    //copy constructor  
+    Player(const Player& other)
+        : maxHealth(other.maxHealth),
+        currentHealth(other.currentHealth),
+        enableDash(other.enableDash),
+        parrySuccessDuration(other.parrySuccessDuration),
+        attackDamage(other.attackDamage),
+        defensePercent(other.defensePercent),
+        enableShoot(other.enableShoot),
+        rng(std::random_device{}()) // Reinitialize RNG for the new instance  
+    {
+        loadResources();
+        initAnimations();
+        position = other.position;
+        animations.getSprite().setPosition(position);
+
+        // Initialize RNG distribution using member rng  
+        attackDistribution = std::uniform_int_distribution<int>(0, 2); // For 3 attack types (0, 1, 2)  
+        attackStates = { AnimationState::Attack1, AnimationState::Attack2, AnimationState::Attack3 }; // Store attack states  
+    }
+
     void loadResources() {
         auto& tm = TextureManager::instance();
         tm.load("player_idle", "../assets/player/Idle.png");
@@ -1192,18 +1213,10 @@ private:
 class BossGame {
 public:
 
-    BossGame()
-        : window(sf::VideoMode(1280, 720), "Final Boss"),
-        player(
-            100,     // maxHealth
-            100,     // currentHealth
-            true,    // enableDash
-            0.75f,    // parrySuccessTime
-            15,      // baseAttackDamage
-            0.f,     // defensePercent
-            true     // enableShoot
-        ),
-        boss({ 1100.f, 385.f }, & player, 600.f, 1250.f, 600),
+    BossGame(Player player)
+        :window(sf::VideoMode(1280, 720), "Final Boss"),
+        player(player),  // Initialize player with the provided object
+        boss({ 1100.f, 385.f }, & this->player, 600.f, 1250.f, 600),
         gameRng(rd()), gameClock(), timerText()
     {
         auto& sm = SoundManager::instance();
@@ -1817,7 +1830,16 @@ private:
 
 // --- Main Function --- 
 int main() {
-    BossGame game;
+	Player player(
+		100,     // maxHealth
+		100,     // currentHealth
+		true,    // enableDash
+		0.75f,    // parrySuccessTime
+		15,      // baseAttackDamage
+		0.f,     // defensePercent
+		true     // enableShoot
+	);
+    BossGame game(player);
     game.run();
     if (game.playerWin()) {
         std::cout << "You win!" << std::endl;
