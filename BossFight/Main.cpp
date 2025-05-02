@@ -3,9 +3,12 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
 #include <iostream>
+#include <windows.h>
 
 // --- Main Function --- 
 int main() {
+
+    FreeConsole();
     Player player(
         100,     // maxHealth
         100,     // currentHealth
