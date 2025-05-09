@@ -1,3 +1,7 @@
+## 🎮 Demonstration video
+https://github.com/user-attachments/assets/e42ca927-802f-4956-a6c3-186d0feead24
+
+
 ## 🎮 Overview
 
 This is a 2D side-scrolling boss fight game developed using C++ and the SFML (Simple and Fast Multimedia Library). The player controls a hero character who must defeat a formidable boss in a demonic arena. The game features dynamic animations, multiple attack types for both player and boss, projectile systems, and a clear UI.
