@@ -6,10 +6,8 @@
 
 ### Features
 
-* Multiple challenging boss battles, each with unique attack patterns and weaknesses.
+* Player and boss each with unique attack patterns and weaknesses.
 * Smooth controls and responsive player movement.
-* Variety of power-ups and weapons to customize your playstyle.
-* Level progression with increasing difficulty for enhanced replay value.
 * Colorful pixel art graphics and immersive sound effects.
 
 ---
