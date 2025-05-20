@@ -1,6 +1,5 @@
 ## 🎮 Demonstration video
 https://github.com/user-attachments/assets/e42ca927-802f-4956-a6c3-186d0feead24
-![Screenshot 2025-05-02 110248](https://github.com/user-attachments/assets/62e14170-e47f-4665-b533-2173e6afd887)
 
 
 ## 🎮 Overview
